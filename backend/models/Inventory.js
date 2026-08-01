@@ -133,6 +133,15 @@ const inventorySchema = new mongoose.Schema(
             type: Number,
             min: 0
         },
+        category: {
+            type: String,
+            trim: true,
+            default: 'General'
+        },
+        tags: [{
+            type: String,
+            trim: true
+        }],
     },
     {
         timestamps: true, // Adds createdAt and updatedAt automatically

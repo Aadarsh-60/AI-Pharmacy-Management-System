@@ -11,7 +11,8 @@ import {
   getMedicineSalesDetails,
   getSaleBillDetails,
   getMedicinesByParty,
-  getClientsList
+  getClientsList,
+  getTopParties
 } from '../controllers/billController.js';
 import inventoryRoutes from './inventoryRoutes.js';
 import { getPurchaseBillHistory } from '../controllers/billController.js';
@@ -32,6 +33,7 @@ router.get('/batch-details', isAuthenticated, getBatchDetails);
 router.get('/purchase-history', isAuthenticated, getPurchaseHistory);
 router.post('/next-invoice-number', isAuthenticated, getNextInvoiceNumber);
 router.get('/medicine-sales', isAuthenticated, getMedicineSalesDetails);
+router.get('/top-parties', isAuthenticated, getTopParties);
 router.get('/medicines-by-party', isAuthenticated, getMedicinesByParty);
 router.get('/clients', isAuthenticated, getClientsList);
 
@@ -48,17 +50,23 @@ router.get('/returnable-quantities', isAuthenticated, async (req, res) => {
       return res.status(400).json({ message: 'Email and party name are required' });
     }
 
+    const cleanPartyName = partyName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+    const partyRegex = new RegExp(`^\\s*${cleanPartyName}\\s*$`, 'i');
+
     // Get all sale bills for the party (case-insensitive exact match)
     const saleBills = await SaleBill.find({
       email,
-      partyName: { $regex: new RegExp(`^${partyName}$`, 'i') } // Exact match, case-insensitive
+      $or: [
+        { partyName: partyRegex },
+        { customerName: partyRegex }
+      ]
     });
     console.log('Found sale bills for party:', saleBills.length);
 
     // Get all return bills for the party (case-insensitive exact match)
     const returnBills = await ReturnBill.find({
       email,
-      customerName: { $regex: new RegExp(`^${partyName}$`, 'i') } // Exact match, case-insensitive
+      customerName: partyRegex
     });
     console.log('Found return bills for party:', returnBills.length);
 
@@ -68,12 +76,14 @@ router.get('/returnable-quantities', isAuthenticated, async (req, res) => {
       if (bill.items && Array.isArray(bill.items)) {
         bill.items.forEach(item => {
           if (item.itemName && item.batch && item.quantity) {
-            const key = `${item.itemName.toLowerCase()}-${item.batch}`;
+            const key = `${item.itemName.trim().toLowerCase()}-${item.batch.trim()}`;
             const currentData = partySoldMap.get(key) || {
               itemName: item.itemName,
               batch: item.batch,
               quantity: 0,
-              mrp: item.mrp || 0
+              mrp: item.mrp || 0,
+              discount: item.discount || 0,
+              gstPercentage: item.gstPercentage || 0
             };
             currentData.quantity += parseInt(item.quantity) || 0;
             partySoldMap.set(key, currentData);
@@ -89,7 +99,7 @@ router.get('/returnable-quantities', isAuthenticated, async (req, res) => {
       if (bill.items && Array.isArray(bill.items)) {
         bill.items.forEach(item => {
           if (item.itemName && item.batch && item.quantity) {
-            const key = `${item.itemName.toLowerCase()}-${item.batch}`;
+            const key = `${item.itemName.trim().toLowerCase()}-${item.batch.trim()}`;
             const currentQuantity = partyReturnedMap.get(key) || 0;
             partyReturnedMap.set(key, currentQuantity + (parseInt(item.quantity) || 0));
           }
@@ -127,7 +137,9 @@ router.get('/returnable-quantities', isAuthenticated, async (req, res) => {
           returnedQuantity: returnedQuantity, // Total returned by this specific party
           returnableQuantity: returnableQuantity, // What they can still return
           mrp: soldData.mrp,
-          purchaseRate: purchaseRate
+          purchaseRate: purchaseRate,
+          discount: soldData.discount,
+          gstPercentage: soldData.gstPercentage
         });
       }
     });

@@ -83,11 +83,10 @@ const SaleReturnForm = () => {
     try {
       setFetchingBills(true);
       const token = localStorage.getItem('token');
-      // Use the new available inventory endpoint
-      const response = await axiosInstance.get('http://localhost:5000/api/inventory/available', {
+      const response = await axiosInstance.get('http://localhost:5000/api/bills/returnable-quantities', {
         params: {
           email: formData.email,
-          // Optionally filter by itemName or batch if needed
+          partyName: formData.customerName
         },
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -99,13 +98,56 @@ const SaleReturnForm = () => {
         const formattedMedicines = response.data.map(medicine => ({
           itemName: medicine.itemName,
           batch: medicine.batch,
-          quantity: medicine.availableQuantity, // Use availableQuantity
+          quantity: medicine.returnableQuantity, // Available to return
           soldQuantity: medicine.soldQuantity,
           returnedQuantity: medicine.returnedQuantity,
           mrp: medicine.mrp,
-          purchaseRate: medicine.purchaseRate
+          purchaseRate: medicine.mrp,
+          discount: medicine.discount || 0,
+          gstPercentage: medicine.gstPercentage || 0
         }));
+        
+        // Auto-populate the form items
+        const autoPopulatedItems = formattedMedicines.map(medicine => {
+          const mrp = medicine.mrp || 0;
+          const qty = medicine.quantity || 0; // default to full returnable
+          const discount = medicine.discount || 0;
+          const gstPercentage = medicine.gstPercentage || 0;
+          
+          const totalAmount = mrp * qty;
+          const discountAmount = (totalAmount * discount) / 100;
+          const amountAfterDiscount = totalAmount - discountAmount;
+          const gstAmount = (amountAfterDiscount * gstPercentage) / 100;
+          const netAmount = amountAfterDiscount + gstAmount;
+
+          return {
+            itemName: medicine.itemName,
+            batch: medicine.batch,
+            quantity: qty,
+            discount: discount,
+            totalAmount: totalAmount,
+            discountAmount: discountAmount,
+            amount: amountAfterDiscount,
+            availableQuantity: qty,
+            purchaseRate: mrp, // mapped to mrp
+            mrp: mrp,
+            gstPercentage: gstPercentage,
+            gstAmount: gstAmount,
+            netAmount: netAmount,
+            returnableQuantity: qty,
+            availableBatches: [{
+              batch: medicine.batch,
+              quantity: qty,
+              mrp: mrp,
+              purchaseRate: mrp
+            }]
+          };
+        });
+
         setSaleBills(formattedMedicines);
+        setFormData(prevState => ({ ...prevState, items: autoPopulatedItems }));
+        calculateTotals(autoPopulatedItems);
+        
         setSuccess('Medicines loaded successfully');
         setTimeout(() => setSuccess(''), 3000);
       } else {
@@ -161,7 +203,7 @@ const SaleReturnForm = () => {
           batch: medicine.batch,
           quantity: medicine.quantity, // Use availableQuantity
           mrp: medicine.mrp,
-          purchaseRate: medicine.purchaseRate
+          purchaseRate: medicine.mrp // Fallback for amount calculation if it was used anywhere else
         }))
       };
 
@@ -173,8 +215,8 @@ const SaleReturnForm = () => {
           batch: medicine.batch,
           availableQuantity: medicine.quantity, // Use availableQuantity
           returnableQuantity: medicine.quantity,
-          purchaseRate: medicine.purchaseRate,
-          amount: medicine.purchaseRate,
+          purchaseRate: medicine.mrp,
+          amount: medicine.mrp,
           quantity: 1
         };
       }
@@ -197,8 +239,8 @@ const SaleReturnForm = () => {
         batch: selectedBatch.batch,
         availableQuantity: selectedBatch.quantity, // Use availableQuantity
         returnableQuantity: selectedBatch.quantity,
-        purchaseRate: selectedBatch.purchaseRate,
-        amount: selectedBatch.purchaseRate,
+        purchaseRate: selectedBatch.mrp,
+        amount: selectedBatch.mrp,
         quantity: 1
       };
     }
@@ -233,7 +275,7 @@ const SaleReturnForm = () => {
       };
       
       // Recalculate amounts when any value changes
-      const totalAmount = item.purchaseRate * updatedItems[index].quantity;
+      const totalAmount = item.mrp * updatedItems[index].quantity;
       const discountAmount = (totalAmount * updatedItems[index].discount) / 100;
       const amountAfterDiscount = totalAmount - discountAmount;
       const gstAmount = (amountAfterDiscount * updatedItems[index].gstPercentage) / 100;
@@ -293,7 +335,7 @@ const SaleReturnForm = () => {
     let netAmount = 0;
 
     items.forEach(item => {
-      const itemTotalAmount = item.purchaseRate * item.quantity;
+      const itemTotalAmount = item.mrp * item.quantity;
       const itemDiscountAmount = (itemTotalAmount * item.discount) / 100;
       const itemAmountAfterDiscount = itemTotalAmount - itemDiscountAmount;
       const itemGstAmount = (itemAmountAfterDiscount * item.gstPercentage) / 100;
@@ -656,7 +698,7 @@ const SaleReturnForm = () => {
                     value={formData.returnInvoiceNumber}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter return invoice no."
+                    placeholder="E.g., SRET-103 (Must match original sale bill)"
                     required
                   />
                 </div>
@@ -669,7 +711,7 @@ const SaleReturnForm = () => {
                     value={formData.receiptNumber}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter receipt no."
+                    placeholder="E.g., RRCP-103"
                     required
                   />
                 </div>
@@ -683,7 +725,7 @@ const SaleReturnForm = () => {
                       value={formData.customerName}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter customer name"
+                      placeholder="E.g., Rahul Sharma - Type precisely for tracking"
                       required
                     />
                   </div>
@@ -737,7 +779,7 @@ const SaleReturnForm = () => {
                         <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
                         <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Available Qty</th>
                         <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Returnable Qty</th>
-                        <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Rate</th>
+                        <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rate (MRP)</th>
                         <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Return Qty</th>
                         <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Discount %</th>
                         <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">GST %</th>
@@ -755,7 +797,8 @@ const SaleReturnForm = () => {
                               value={item.itemName}
                               onChange={(e) => handleItemNameChange(index, e)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter medicine name"
+                              placeholder="E.g., Dolo 650mg"
+                              title="Enter exact medicine name from original bill"
                               required
                             />
                           </td>

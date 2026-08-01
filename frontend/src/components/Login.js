@@ -28,9 +28,18 @@ const Login = () => {
       );
 
       if (response.status === 200) {
-        // Store both token and email in localStorage
+        // Store token, email, name, and role in localStorage
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('email', formData.email.toLowerCase()); // Store email in lowercase
+        
+        if (response.data.user) {
+            if (response.data.user.role) {
+                localStorage.setItem('role', response.data.user.role);
+            }
+            if (response.data.user.name) {
+                localStorage.setItem('name', response.data.user.name);
+            }
+        }
         navigate('/dashboard');
       } else {
         setError('Login failed. Please check your credentials.');
@@ -47,6 +56,18 @@ const Login = () => {
     }
   };
 
+  const handleDemoLogin = () => {
+    // Pre-fill and auto-submit
+    setFormData({
+      email: 'vikramaadarsh1999@gmail.com',
+      password: '12345',
+    });
+    // Use a small timeout to let state update before auto-submitting
+    setTimeout(() => {
+      document.getElementById('loginFormSubmitBtn').click();
+    }, 100);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
@@ -56,6 +77,22 @@ const Login = () => {
             {error}
           </div>
         )}
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={handleDemoLogin}
+            className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-bold shadow-md transform hover:scale-105 transition-all duration-300"
+          >
+            🚀 Test With Demo User
+          </button>
+        </div>
+        
+        <div className="flex items-center my-4">
+          <div className="flex-grow border-t border-gray-300"></div>
+          <span className="mx-4 text-gray-500 text-sm">or login manually</span>
+          <div className="flex-grow border-t border-gray-300"></div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <input
@@ -80,6 +117,7 @@ const Login = () => {
             />
           </div>
           <button
+            id="loginFormSubmitBtn"
             type="submit"
             disabled={loading}
             className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:bg-gray-400"

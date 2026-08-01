@@ -71,6 +71,11 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    role: {
+        type: String,
+        enum: ['admin', 'manager', 'user'],
+        default: 'user'
+    },
     // Remove the old verificationToken field if it exists
     // verificationToken: {
     //     type: String,

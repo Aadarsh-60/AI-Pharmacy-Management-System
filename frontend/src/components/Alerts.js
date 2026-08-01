@@ -77,7 +77,10 @@ const Alerts = () => {
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         // Get inventory data for alerts
-        const response = await axiosInstance.get(`http://localhost:5000/api/inventory/${email}`);
+        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
+        const response = await axios.get(`http://localhost:5000/api/inventory?email=${email}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         const inventoryData = response.data;
 
         const currentDate = new Date();

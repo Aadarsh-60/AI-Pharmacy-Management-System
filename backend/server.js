@@ -15,6 +15,9 @@ import inventoryRoutes from './routes/inventoryRoutes.js';
 import expiryRoutes from './routes/expiryRoutes.js';
 import purchaseReturnRoutes from './routes/purchaseReturnRoutes.js';
 import ocrBillRoutes from './routes/ocrBillRoutes.js';
+import activityLogRoutes from './routes/activityLogRoutes.js';
+import chatbotRoutes from './routes/chatbotRoutes.js';
+import forecastRoutes from './routes/forecastRoutes.js';
 
 // Middleware
 import errorMiddleware from './middleware/errorMiddleware.js';
@@ -167,6 +170,9 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/expiry', expiryRoutes);
 app.use('/api/purchase-returns', purchaseReturnRoutes);
 app.use('/api/ocr-bill', ocrBillRoutes);
+app.use('/api/activity-logs', activityLogRoutes);
+app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/forecast', forecastRoutes);
 
 // Serve PDF files for download
 app.get('/download/pdf/:invoiceNumber', (req, res) => {

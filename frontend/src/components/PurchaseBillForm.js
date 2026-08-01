@@ -357,7 +357,7 @@ const PurchaseBillForm = () => {
         <input
           type="text"
           name="supplierInvoiceNumber"
-          placeholder="Supplier Invoice Number"
+          placeholder="E.g., INV-2024-105 (Supplier Invoice)"
           value={purchaseDetails.supplierInvoiceNumber}
           onChange={handleDetailsChange}
           className="border border-gray-300 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-md"
@@ -365,7 +365,7 @@ const PurchaseBillForm = () => {
         <input
           type="text"
           name="receiptNumber"
-          placeholder="Receipt Number"
+          placeholder="E.g., PRCP-105 (Receipt Number)"
           value={purchaseDetails.receiptNumber}
           onChange={handleDetailsChange}
           className="border border-gray-300 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-md"
@@ -373,7 +373,7 @@ const PurchaseBillForm = () => {
         <input
           type="text"
           name="partyName"
-          placeholder="Party Name"
+          placeholder="E.g., MediLife Suppliers"
           value={purchaseDetails.partyName}
           onChange={handleDetailsChange}
           className="border border-gray-300 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-md"
@@ -432,7 +432,14 @@ const PurchaseBillForm = () => {
                       name={field}
                       value={item[field]}
                       onChange={(e) => handleItemChange(rowIndex, e)}
-                      placeholder={field}
+                      placeholder={
+                        field === "itemName" ? "E.g., Dolo 650mg" :
+                        field === "batch" ? "E.g., DL-101" :
+                        field === "quantity" ? "Qty (e.g., 50)" :
+                        field === "purchaseRate" ? "Rate (e.g., 15)" :
+                        field
+                      }
+                      title={`Enter ${field}`}
                       className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
                       readOnly={["totalAmount", "discountAmount", "gstAmount", "netAmount"].includes(field)}
                     />

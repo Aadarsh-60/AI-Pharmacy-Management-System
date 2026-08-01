@@ -12,7 +12,9 @@ const AddMedicine = () => {
         purchaseRate: '',
         mrp: '',
         gstPercentage: '',
-        description: ''
+        description: '',
+        category: 'General',
+        tags: ''
     });
 
     const handleChange = (e) => {
@@ -29,10 +31,13 @@ const AddMedicine = () => {
             const token = localStorage.getItem('token');
             const email = localStorage.getItem('email');
 
-            const response =await axiosInstance.post('http://localhost:5000/api/inventory', {
+            const dataToSend = {
                 ...formData,
+                tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== ''),
                 email
-            }, {
+            };
+
+            const response =await axiosInstance.post('http://localhost:5000/api/inventory', dataToSend, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -48,7 +53,9 @@ const AddMedicine = () => {
                 purchaseRate: '',
                 mrp: '',
                 gstPercentage: '',
-                description: ''
+                description: '',
+                category: 'General',
+                tags: ''
             });
         } catch (error) {
             toast.error(error.response?.data?.message || 'Error adding medicine');
@@ -151,6 +158,28 @@ const AddMedicine = () => {
                         value={formData.gstPercentage}
                         onChange={handleChange}
                         required
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Category</label>
+                    <input
+                        type="text"
+                        name="category"
+                        value={formData.category}
+                        onChange={handleChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Tags (comma separated)</label>
+                    <input
+                        type="text"
+                        name="tags"
+                        value={formData.tags}
+                        onChange={handleChange}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
                 </div>

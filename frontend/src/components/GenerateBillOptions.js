@@ -43,6 +43,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 
 function GenerateBillOptions() {
   const navigate = useNavigate();
@@ -105,7 +106,10 @@ function GenerateBillOptions() {
             Our support team is ready to help you optimize your billing processes.
           </p>
           <div className="flex justify-center space-x-4">
-            <button className="px-6 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all">
+            <button 
+              onClick={() => toast.error('Support module coming soon!')}
+              className="px-6 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all"
+            >
               Contact Support
             </button>
             <button 

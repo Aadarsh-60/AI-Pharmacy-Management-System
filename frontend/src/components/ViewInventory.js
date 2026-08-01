@@ -129,9 +129,10 @@
 
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Search, RefreshCw, AlertCircle, Package, Calendar, Tag, User, DollarSign, TrendingUp, Shield, Activity, History, Eye } from 'lucide-react';
+import { Search, RefreshCw, AlertCircle, Package, Calendar, Tag, User, DollarSign, TrendingUp, Shield, Activity, History, Eye, Download } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { SOCKET_EVENTS } from '../utils/socketUtils';
+import { exportToCSV } from '../utils/exportCSV';
 
 const Inventory = () => {
   const [inventory, setInventory] = useState([]);
@@ -528,7 +529,40 @@ const Inventory = () => {
               </select>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => exportToCSV(
+                  filteredInventory.map(item => ({
+                    itemName: item.itemName,
+                    batch: item.batch,
+                    supplier: item.partyName,
+                    expiryDate: item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '',
+                    pack: item.pack || '',
+                    quantity: item.quantity,
+                    purchaseRate: item.purchaseRate,
+                    mrp: item.mrp,
+                    gst: item.gstPercentage,
+                  })),
+                  'inventory_export.csv',
+                  [
+                    { key: 'itemName', label: 'Medicine Name' },
+                    { key: 'batch', label: 'Batch' },
+                    { key: 'supplier', label: 'Supplier' },
+                    { key: 'expiryDate', label: 'Expiry Date' },
+                    { key: 'pack', label: 'Pack' },
+                    { key: 'quantity', label: 'Quantity' },
+                    { key: 'purchaseRate', label: 'Purchase Rate' },
+                    { key: 'mrp', label: 'MRP' },
+                    { key: 'gst', label: 'GST %' },
+                    { key: 'category', label: 'Category' },
+                    { key: 'tags', label: 'Tags' },
+                  ]
+                )}
+                className="flex items-center justify-center px-5 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-md"
+              >
+                <Download className="h-5 w-5 mr-2" />
+                Export CSV
+              </button>
               <button
                 onClick={fetchInventory}
                 disabled={isRefreshing}
@@ -598,7 +632,7 @@ const Inventory = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       {[
-                        'Item Name', 'Batch', 'Supplier', 'Expiry Date', 'Pack',
+                        'Item Name', 'Batch', 'Category', 'Tags', 'Supplier', 'Expiry Date', 'Pack',
                         'Quantity', 'Purchase Rate', 'MRP', 'GST (%)', 'Description'
                       ].map((header) => (
                         <th key={header} 
@@ -627,6 +661,22 @@ const Inventory = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-gray-600 text-sm">{item.batch}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-gray-600 text-sm font-medium">{item.category || 'General'}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex gap-1 flex-wrap">
+                            {item.tags && item.tags.length > 0 ? (
+                                item.tags.map((tag, idx) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                        {tag}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-gray-400 text-xs">-</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

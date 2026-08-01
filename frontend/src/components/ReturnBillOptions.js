@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 
 const ReturnBillOptions = () => {
   const navigate = useNavigate();
@@ -56,11 +57,14 @@ const ReturnBillOptions = () => {
             Our support team is available to guide you through any return process.
           </p>
           <div className="flex justify-center gap-4 flex-wrap">
-            <button className="px-6 py-3 bg-gradient-to-r from-blue-700 to-purple-700 text-white rounded-full font-semibold hover:opacity-90 transition">
+            <button 
+              onClick={() => toast.error('Support module coming soon!')}
+              className="px-6 py-3 bg-gradient-to-r from-blue-700 to-purple-700 text-white rounded-full font-semibold hover:opacity-90 transition"
+            >
               Contact Support
             </button>
             <button
-              onClick={() => navigate('/documentation/return-bills')}
+              onClick={() => toast.error('Documentation coming soon!')}
               className="px-6 py-3 border border-gray-400 text-gray-800 bg-white/60 rounded-full font-semibold hover:bg-white/80 transition"
             >
               View Documentation

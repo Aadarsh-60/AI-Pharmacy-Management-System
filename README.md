@@ -81,7 +81,11 @@
 - **Socket.io integration** for live inventory, billing, and expiry updates
 - Multi-user real-time synchronization
 
-### 🤖 OCR (Experimental)
+### 🤖 AI Integrations (Powered by Gemini)
+- **AI Pharmacist Chatbot** — An intelligent floating assistant that suggests generic alternatives and substitutes for out-of-stock medicines by reading real-time inventory.
+- **Smart Demand Forecasting** — AI analyzes the last 30 days of sales data to predict future demand and suggests optimal auto-reorder quantities.
+
+### 📝 OCR (Experimental)
 - **Google Cloud Vision OCR** for scanning and digitizing physical bills
 
 ---
@@ -112,6 +116,7 @@
 | PDFKit | Server-side PDF generation |
 | Multer | File upload handling |
 | Google Cloud Vision | OCR processing |
+| Google Gen AI SDK | AI Chatbot & Forecasting |
 | express-rate-limit | Rate limiting |
 
 ---
@@ -232,6 +237,7 @@ PORT=5000
 JWT_SECRET=your_jwt_secret_key
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_gmail_app_password
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 Start the backend server:
@@ -275,6 +281,7 @@ The app will be available at `http://localhost:3000`.
 | `JWT_SECRET` | Secret key for JWT token signing | ✅ |
 | `EMAIL_USER` | Gmail address for sending OTP emails | ✅ |
 | `EMAIL_PASS` | Gmail App Password | ✅ |
+| `GEMINI_API_KEY` | Google Gemini API Key for AI features | ✅ |
 
 ### Frontend (`frontend/.env`)
 
@@ -327,6 +334,12 @@ The app will be available at `http://localhost:3000`.
 |--------|----------|-------------|
 | POST | `/api/purchase-returns` | Create purchase return |
 | GET | `/api/purchase-returns` | Get all purchase returns |
+
+### AI Features
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/chatbot` | Chat with AI Pharmacist |
+| GET | `/api/forecast` | Get demand forecast & reorder suggestions |
 
 ### Utility
 | Method | Endpoint | Description |

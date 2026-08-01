@@ -126,6 +126,8 @@ async function updateInventoryInternalWithFixedPartyName(
             if (otherFields.gstPercentage !== undefined) inventoryItem.gstPercentage = otherFields.gstPercentage;
             if (otherFields.pack !== undefined) inventoryItem.pack = otherFields.pack;
             if (otherFields.description !== undefined) inventoryItem.description = otherFields.description;
+            if (otherFields.category !== undefined) inventoryItem.category = otherFields.category;
+            if (otherFields.tags !== undefined) inventoryItem.tags = otherFields.tags;
 
             // Log before saving update
             console.log(`[updateInventoryInternal] About to SAVE updated item (ID: ${inventoryItem._id}). Data to save:`, JSON.stringify(inventoryItem.toObject ? inventoryItem.toObject() : inventoryItem, null, 2));
@@ -163,6 +165,8 @@ async function updateInventoryInternalWithFixedPartyName(
                 gstPercentage: otherFields.gstPercentage,
                 pack: otherFields.pack,
                 description: otherFields.description,
+                category: otherFields.category,
+                tags: otherFields.tags,
                 amount
             };
             

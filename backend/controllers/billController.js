@@ -1292,14 +1292,15 @@ export const createReturnBill = async (req, res) => {
         const uniqueCustomers = [...new Set(allSaleBills.map(bill => bill.partyName))];
         console.log('Available customers:', uniqueCustomers);
 
-        // Get all sale bills for this customer with more flexible matching
+        const cleanCustomerName = customerName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+        const customerRegex = new RegExp(`^\\s*${cleanCustomerName}\\s*$`, 'i');
+
+        // Get all sale bills for this customer with more flexible matching (ignoring extra spaces)
         const saleBills = await SaleBill.find({
             email,
             $or: [
-                { partyName: customerName }, // Exact match
-                { partyName: { $regex: new RegExp(`^${customerName}$`, 'i') } }, // Case-insensitive exact match
-                { customerName: customerName }, // Exact match on customerName field
-                { customerName: { $regex: new RegExp(`^${customerName}$`, 'i') } } // Case-insensitive exact match on customerName field
+                { partyName: customerRegex },
+                { customerName: customerRegex }
             ]
         });
 
@@ -1341,7 +1342,7 @@ export const createReturnBill = async (req, res) => {
         saleBills.forEach(bill => {
             if (bill.items && Array.isArray(bill.items)) {
                 bill.items.forEach(item => {
-                    const key = `${item.itemName.toLowerCase()}-${item.batch}`;
+                    const key = `${item.itemName.trim().toLowerCase()}-${item.batch.trim()}`;
                     const currentData = soldItemsMap.get(key) || {
                         totalSold: 0,
                         purchaseRate: item.purchaseRate,
@@ -1364,12 +1365,9 @@ export const createReturnBill = async (req, res) => {
 
         // Get existing return bills
         const returnBills = await ReturnBill.find({
-                email,
-            $or: [
-                { customerName: customerName },
-                { customerName: { $regex: new RegExp(`^${customerName}$`, 'i') } }
-            ]
-            });
+            email,
+            customerName: customerRegex
+        });
 
         console.log('Found return bills:', {
             count: returnBills.length,
@@ -1380,7 +1378,7 @@ export const createReturnBill = async (req, res) => {
         returnBills.forEach(bill => {
             if (bill.items && Array.isArray(bill.items)) {
                 bill.items.forEach(item => {
-                    const key = `${item.itemName.toLowerCase()}-${item.batch}`;
+                    const key = `${item.itemName.trim().toLowerCase()}-${item.batch.trim()}`;
                     const currentQuantity = returnedQuantityMap.get(key) || 0;
                     returnedQuantityMap.set(key, currentQuantity + (parseInt(item.quantity) || 0));
                 });
@@ -1391,7 +1389,7 @@ export const createReturnBill = async (req, res) => {
 
         // Validate each item is returnable
         for (const item of items) {
-            const key = `${item.itemName.toLowerCase()}-${item.batch}`;
+            const key = `${item.itemName.trim().toLowerCase()}-${item.batch.trim()}`;
             console.log('Checking item:', {
                 itemName: item.itemName,
                 batch: item.batch,
@@ -1876,6 +1874,59 @@ export const getNextInvoiceNumber = async (req, res) => {
       });
   }
 };
+// Fetch top customers and suppliers for dashboard
+export const getTopParties = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const email = req.user.email;
+        
+        const query = {
+            $or: [
+                { userId: userId },
+                { email: email }
+            ]
+        };
+
+        const saleBills = await SaleBill.find(query);
+        const purchaseBills = await Bill.find({ ...query, billType: 'purchase' });
+
+        // Calculate top customers by revenue
+        const customerMap = {};
+        saleBills.forEach(bill => {
+            const name = bill.partyName;
+            if (!name || name === 'Cash' || name === 'cash') return;
+            if (!customerMap[name]) { customerMap[name] = { totalAmount: 0, billsCount: 0 }; }
+            customerMap[name].totalAmount += (bill.netAmount || bill.totalAmount || 0);
+            customerMap[name].billsCount += 1;
+        });
+
+        const topCustomers = Object.entries(customerMap)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.totalAmount - a.totalAmount)
+            .slice(0, 5);
+
+        // Calculate top suppliers by purchase amount
+        const supplierMap = {};
+        purchaseBills.forEach(bill => {
+            const name = bill.partyName;
+            if (!name) return;
+            if (!supplierMap[name]) { supplierMap[name] = { totalAmount: 0, billsCount: 0 }; }
+            supplierMap[name].totalAmount += (bill.totalAmount || bill.purchaseAmount || 0);
+            supplierMap[name].billsCount += 1;
+        });
+
+        const topSuppliers = Object.entries(supplierMap)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.totalAmount - a.totalAmount)
+            .slice(0, 5);
+
+        res.status(200).json({ success: true, topCustomers, topSuppliers });
+    } catch (error) {
+        console.error('Error in getTopParties:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 
 export const getMedicineSalesDetails = async (req, res) => {
     try {

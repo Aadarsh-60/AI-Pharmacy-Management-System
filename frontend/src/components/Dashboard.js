@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useSocket } from '../context/SocketContext';
 import { SOCKET_EVENTS } from "../utils/socketUtils.js";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts';
 
 // Create axios instance with proper configuration
 const axiosInstance = axios.create({
@@ -36,13 +37,17 @@ function Dashboard() {
   const [expiringSoonCount, setExpiringSoonCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [email, setEmail] = useState("");
+  const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [categoryDistribution, setCategoryDistribution] = useState([]);
   const [purchaseSuggestions, setPurchaseSuggestions] = useState([]);
   const [analyticsData, setAnalyticsData] = useState({
     totalRevenue: 0,
     averageOrderValue: 0,
     topSellingMedicines: [],
-    salesGrowth: 0
+    salesGrowth: 0,
+    topCustomers: [],
+    topSuppliers: []
   });
   
   // Real-time activity metrics
@@ -70,9 +75,14 @@ function Dashboard() {
     const expiringSoonThreshold = 30;
     const lowStockItems = [];
     const expiringSoonItems = [];
+    const categories = {};
     const currentDate = new Date();
 
     inventoryData.forEach((item) => {
+      // Group by category
+      const cat = item.category || 'General';
+      categories[cat] = (categories[cat] || 0) + 1;
+
       // Check for low stock
       const quantity = parseInt(item.quantity) || 0;
       if (quantity <= lowStockThreshold && quantity > 0) {
@@ -104,6 +114,7 @@ function Dashboard() {
 
     setLowStockCount(lowStockItems.length);
     setExpiringSoonCount(expiringSoonItems.length);
+    setCategoryDistribution(Object.entries(categories).map(([name, value]) => ({ name, value })));
 
     const lowStockNotifications = lowStockItems.map(item => ({
       type: "warning",
@@ -186,6 +197,15 @@ function Dashboard() {
           console.error("Error parsing user data:", e);
         }
       }
+    }
+    
+    // Also fetch name
+    const storedName = localStorage.getItem("name");
+    if (storedName) {
+      setUserName(storedName);
+    } else if (userEmail) {
+      // Fallback: Use the part before @ if name is not found
+      setUserName(userEmail.split('@')[0]);
     }
     
     const emailToUse = userEmail || "Guest";
@@ -277,11 +297,26 @@ function Dashboard() {
           .slice(0, 5)
           .map(([name, quantity]) => ({ name, quantity }));
 
+        // Fetch Top Parties
+        let topCustomers = [];
+        let topSuppliers = [];
+        try {
+          const partiesRes = await axiosInstance.get('/api/bills/top-parties');
+          if (partiesRes.data && partiesRes.data.success) {
+            topCustomers = partiesRes.data.topCustomers || [];
+            topSuppliers = partiesRes.data.topSuppliers || [];
+          }
+        } catch (err) {
+          console.error("Error fetching top parties:", err);
+        }
+
         setAnalyticsData({
           totalRevenue,
           averageOrderValue,
           topSellingMedicines,
-          salesGrowth: 0
+          salesGrowth: 0,
+          topCustomers,
+          topSuppliers
         });
 
         // Update activity metrics
@@ -297,7 +332,9 @@ function Dashboard() {
         totalRevenue: 0,
         averageOrderValue: 0,
         topSellingMedicines: [],
-        salesGrowth: 0
+        salesGrowth: 0,
+        topCustomers: [],
+        topSuppliers: []
       });
     }
   }, [fetchUserEmail]);
@@ -417,6 +454,7 @@ function Dashboard() {
     localStorage.removeItem("email");
     localStorage.removeItem("authToken");
     localStorage.removeItem("user");
+    localStorage.removeItem("name");
     navigate("/login");
   };
 
@@ -456,7 +494,7 @@ function Dashboard() {
         <div className="flex items-center justify-between mb-8 p-4 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back, {email || "Guest"}!
+              Welcome back, {userName || email || "Guest"}!
             </h1>
             <p className="text-gray-600">Pharmacy Management Dashboard</p>
           </div>
@@ -473,15 +511,6 @@ function Dashboard() {
             >
               {notifications.length} Alerts
             </span>
-            <button 
-              onClick={handleLogout}
-              className="flex items-center space-x-2 bg-red-500 text-white px-4 py-2 rounded-full shadow-sm hover:bg-red-600 transition-all"
-            >
-              <span>Logout</span>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-            </button>
           </div>
         </div>
 
@@ -609,16 +638,157 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Enhanced Advanced Analytics Section */}
-        <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white mb-8">
-          <div className="flex items-center space-x-4 mb-6">
-            <div className="p-3 bg-purple-100 rounded-xl">
-              <span className="text-3xl text-purple-600">📊</span>
+        {/* Top Customers & Suppliers */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+            <div className="flex items-center space-x-3 mb-6">
+              <span className="text-2xl text-blue-600">👥</span>
+              <h2 className="text-xl font-bold text-gray-900">Frequent Customers</h2>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Advanced Analytics</h2>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {analyticsData.topCustomers && analyticsData.topCustomers.length > 0 ? (
+                analyticsData.topCustomers.map((customer, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-200 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg">
+                        {customer.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800">{customer.name}</h4>
+                        <p className="text-xs text-gray-500">{customer.billsCount} Bills</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-blue-700">₹{customer.totalAmount.toFixed(2)}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-500">No customers found</div>
+              )}
+            </div>
           </div>
-          
-          {/* Quick Actions */}
+
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+            <div className="flex items-center space-x-3 mb-6">
+              <span className="text-2xl text-purple-600">🏢</span>
+              <h2 className="text-xl font-bold text-gray-900">Top Suppliers</h2>
+            </div>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {analyticsData.topSuppliers && analyticsData.topSuppliers.length > 0 ? (
+                analyticsData.topSuppliers.map((supplier, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-purple-200 text-purple-700 rounded-full flex items-center justify-center font-bold text-lg">
+                        {supplier.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800">{supplier.name}</h4>
+                        <p className="text-xs text-gray-500">{supplier.billsCount} Invoices</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-purple-700">₹{supplier.totalAmount.toFixed(2)}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-500">No suppliers found</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Interactive Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Top Selling Medicines Bar Chart */}
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+            <div className="flex items-center space-x-3 mb-4">
+              <span className="text-2xl">📊</span>
+              <h3 className="text-lg font-bold text-gray-900">Top Selling Medicines</h3>
+            </div>
+            {analyticsData.topSellingMedicines.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={analyticsData.topSellingMedicines}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="quantity" fill="url(#barGradient)" radius={[6, 6, 0, 0]} />
+                  <defs>
+                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6366f1" />
+                      <stop offset="100%" stopColor="#8b5cf6" />
+                    </linearGradient>
+                  </defs>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[250px] flex items-center justify-center text-gray-400">No sales data yet</div>
+            )}
+          </div>
+
+          {/* Inventory Distribution Pie Chart */}
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+            <div className="flex items-center space-x-3 mb-4">
+              <span className="text-2xl">🥧</span>
+              <h3 className="text-lg font-bold text-gray-900">Inventory Status</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Healthy Stock', value: Math.max(0, inventoryCount - lowStockCount - expiringSoonCount) },
+                    { name: 'Low Stock', value: lowStockCount },
+                    { name: 'Expiring Soon', value: expiringSoonCount },
+                  ]}
+                  cx="50%" cy="50%" innerRadius={55} outerRadius={90}
+                  paddingAngle={4} dataKey="value"
+                >
+                  <Cell fill="#10b981" />
+                  <Cell fill="#f59e0b" />
+                  <Cell fill="#ef4444" />
+                </Pie>
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Category Distribution Pie Chart */}
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+            <div className="flex items-center space-x-3 mb-4">
+              <span className="text-2xl">🏷️</span>
+              <h3 className="text-lg font-bold text-gray-900">Category Distribution</h3>
+            </div>
+            {categoryDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={categoryDistribution}
+                    cx="50%" cy="50%" innerRadius={55} outerRadius={90}
+                    paddingAngle={4} dataKey="value"
+                  >
+                    {categoryDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={['#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#64748b'][index % 6]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[250px] flex items-center justify-center text-gray-400">No categories found</div>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white mb-8">
+          <div className="flex items-center space-x-3 mb-6">
+            <span className="text-2xl">⚡</span>
+            <h2 className="text-xl font-bold text-gray-900">Quick Actions</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <ActionButton 
               label="Sales Report"

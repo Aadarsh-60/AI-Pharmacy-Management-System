@@ -28,7 +28,7 @@ import bcrypt from 'bcrypt'; // For secure password comparison
 // Function to generate JWT token
 export const generateToken = (user) => {
     return jwt.sign(
-        { id: user._id, email: user.email }, // Include user ID for better identification
+        { id: user._id, email: user.email, role: user.role }, // Include user ID and role for better identification
         process.env.JWT_SECRET,
         { expiresIn: '1h' }
     );
@@ -55,7 +55,7 @@ export const loginUser = async (req, res) => {
 
         // Generate JWT token
         const token = generateToken(user);
-        res.status(200).json({ message: 'Login successful', token:token });
+        res.status(200).json({ message: 'Login successful', token:token, user: { email: user.email, role: user.role } });
     } catch (error) {
         res.status(500).json({ message: 'Server error', error: error.message });
     }

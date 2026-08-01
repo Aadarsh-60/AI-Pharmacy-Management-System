@@ -431,24 +431,54 @@ const Register = () => {
 
     const handleOtpChange = (e, idx) => {
       const val = e.target.value.replace(/[^0-9]/g, '');
-      if (!val) return;
+      if (!val) {
+        // If user clears the field
+        const newOtp = [...otp];
+        newOtp[idx] = '';
+        setOtp(newOtp);
+        return;
+      }
       const newOtp = [...otp];
       newOtp[idx] = val[0];
       setOtp(newOtp);
-      if (idx < 5 && val) {
-        otpInputs.current[idx + 1].focus();
+      // Auto-focus next input
+      if (idx < 5) {
+        otpInputs.current[idx + 1]?.focus();
       }
     };
 
     const handleOtpKeyDown = (e, idx) => {
       if (e.key === 'Backspace') {
+        e.preventDefault();
         if (otp[idx]) {
           const newOtp = [...otp];
           newOtp[idx] = '';
           setOtp(newOtp);
         } else if (idx > 0) {
-          otpInputs.current[idx - 1].focus();
+          const newOtp = [...otp];
+          newOtp[idx - 1] = '';
+          setOtp(newOtp);
+          otpInputs.current[idx - 1]?.focus();
         }
+      } else if (e.key === 'ArrowLeft' && idx > 0) {
+        otpInputs.current[idx - 1]?.focus();
+      } else if (e.key === 'ArrowRight' && idx < 5) {
+        otpInputs.current[idx + 1]?.focus();
+      }
+    };
+
+    const handleOtpPaste = (e) => {
+      e.preventDefault();
+      const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+      if (pastedData) {
+        const newOtp = [...otp];
+        for (let i = 0; i < pastedData.length && i < 6; i++) {
+          newOtp[i] = pastedData[i];
+        }
+        setOtp(newOtp);
+        // Focus the next empty box or the last one
+        const nextIdx = Math.min(pastedData.length, 5);
+        otpInputs.current[nextIdx]?.focus();
       }
     };
 
@@ -497,8 +527,11 @@ const Register = () => {
                       inputMode="numeric"
                       maxLength={1}
                       value={digit}
+                      autoFocus={idx === 0}
                       onChange={e => handleOtpChange(e, idx)}
                       onKeyDown={e => handleOtpKeyDown(e, idx)}
+                      onPaste={handleOtpPaste}
+                      onFocus={e => e.target.select()}
                       className="w-12 h-12 text-center text-2xl border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                       required
                     />

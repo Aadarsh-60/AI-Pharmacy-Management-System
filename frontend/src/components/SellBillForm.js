@@ -342,58 +342,40 @@ const handleItemChange = (index, event) => {
     return;
   }
   
-  // Handle batch selection
-  if (name === "batch") {
-    const currentItem = items[index];
-    const cleanBatch = value.replace(/[^a-zA-Z0-9]/g, '');
-    const selectedBatch = currentItem.batchOptions.find(
-      (batch) => batch.batchNumber === cleanBatch
-    );
+  const calculateItemTotals = (updatedItemData) => {
+    const qty = parseFloat(updatedItemData.quantity) || 0;
+    const mrp = parseFloat(updatedItemData.mrp) || 0;
+    const discount = parseFloat(updatedItemData.discount) || 0;
+    const gstPercentage = parseFloat(updatedItemData.gstPercentage) || 0;
+    const availableQty = parseFloat(updatedItemData.availableQuantity) || 0;
     
-    if (selectedBatch) {
-      updateItem(index, {
-        batch: cleanBatch,
-        availableQuantity: selectedBatch.quantity,
-        mrp: selectedBatch.mrp?.toString() || "",
-        purchaseRate: selectedBatch.purchaseRate?.toString() || "",
-        gstPercentage: selectedBatch.gstPercentage?.toString() || "0",
-        expiryDate: selectedBatch.expiryDate
-      });
+    if (qty > availableQty) {
+      setMessage({ type: 'error', text: `Insufficient stock for ${updatedItemData.itemName}` });
+      return { ...updatedItemData, amount: "-" }; // keep amount empty on error
+    } else if (qty < 0) {
+      setMessage({ type: 'error', text: "Quantity cannot be negative" });
+      return { ...updatedItemData, amount: "-" };
     }
-    return;
-  }
-  
-  // Handle quantity, discount, and other fields
-  updateItem(index, { [name]: value });
-  
-  // Calculate amount if quantity, mrp, and discount are available
-  const currentItem = items[index];
-  const quantity = parseFloat(currentItem.quantity) || 0;
-  const mrp = parseFloat(currentItem.mrp) || 0;
-  const discount = parseFloat(currentItem.discount) || 0;
-  const gstPercentage = parseFloat(currentItem.gstPercentage) || 0;
-  
-  if (quantity > currentItem.availableQuantity) {
-    setMessage({ type: 'error', text: `Insufficient stock for ${currentItem.itemName}` });
-  } else if (quantity <= 0) {
-    setMessage({ type: 'error', text: "Quantity must be greater than 0" });
-  } else {
-    // Base calculations
-    const totalAmount = quantity * mrp;
+    
+    if (qty === 0) {
+      // If quantity is 0 or empty, clear the amounts but keep the base fields
+      return { ...updatedItemData, amount: "-" };
+    }
+
+    const totalAmount = qty * mrp;
     const discountAmount = (totalAmount * discount) / 100;
     const amountAfterDiscount = totalAmount - discountAmount;
     
-    // GST calculations
     const gstAmount = (amountAfterDiscount * gstPercentage) / 100;
-    // Split GST into SGST and CGST (for intra-state)
     const sgst = gstAmount / 2;
     const cgst = gstAmount / 2;
-    const igst = 0; // Assuming intra-state, IGST would be 0
+    const igst = 0;
     
-    // Final amount
     const netAmount = amountAfterDiscount + gstAmount;
     
-    updateItem(index, { 
+    setMessage("");
+    return {
+      ...updatedItemData,
       amount: netAmount.toFixed(2),
       totalAmount: totalAmount.toFixed(2),
       discountAmount: discountAmount.toFixed(2),
@@ -403,9 +385,38 @@ const handleItemChange = (index, event) => {
       igst: igst.toFixed(2),
       totalGst: gstAmount.toFixed(2),
       netAmount: netAmount.toFixed(2)
-    });
-    setMessage("");
+    };
+  };
+
+  // Handle batch selection
+  if (name === "batch") {
+    const currentItem = items[index];
+    const cleanBatch = value.replace(/[^a-zA-Z0-9]/g, '');
+    const selectedBatch = currentItem.batchOptions.find(
+      (batch) => batch.batchNumber === cleanBatch
+    );
+    
+    if (selectedBatch) {
+      let updatedPayload = {
+        ...currentItem,
+        batch: cleanBatch,
+        availableQuantity: selectedBatch.quantity,
+        mrp: selectedBatch.mrp?.toString() || "",
+        purchaseRate: selectedBatch.purchaseRate?.toString() || "",
+        gstPercentage: selectedBatch.gstPercentage?.toString() || "0",
+        expiryDate: selectedBatch.expiryDate
+      };
+      // Recalculate totals with new mrp/gst
+      updatedPayload = calculateItemTotals(updatedPayload);
+      updateItem(index, updatedPayload);
+    }
+    return;
   }
+  
+  // Handle quantity, discount, and other fields
+  let updatedPayload = { ...items[index], [name]: value };
+  updatedPayload = calculateItemTotals(updatedPayload);
+  updateItem(index, updatedPayload);
 };
 
   const handleDetailsChange = (event) => {
@@ -852,7 +863,7 @@ const handleItemChange = (index, event) => {
               <input
                 type="text"
                 name="gstNumber"
-                placeholder="Enter GST Number"
+                placeholder="E.g., 27AADCP1234F1Z5 or 'UNREGISTERED'"
                 className="rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 p-3 transition-colors"
                 value={sellDetails.gstNumber}
                 onChange={handleDetailsChange}
@@ -864,7 +875,7 @@ const handleItemChange = (index, event) => {
               <input
                 type="text"
                 name="partyName"
-                placeholder="Enter Party Name"
+                placeholder="E.g., Rahul Sharma - Type precisely for history tracking"
                 className="rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 p-3 transition-colors"
                 value={sellDetails.partyName}
                 onChange={handleDetailsChange}
@@ -900,7 +911,7 @@ const handleItemChange = (index, event) => {
               <input
                 type="text"
                 name="receiptNumber"
-                placeholder="Receipt #"
+                placeholder="E.g., SRCP-1052"
                 className="rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 p-3 transition-colors"
                 value={sellDetails.receiptNumber}
                 onChange={handleDetailsChange}
@@ -949,6 +960,8 @@ const handleItemChange = (index, event) => {
                         <input
                           type="text"
                           name="itemName"
+                          placeholder="Type medicine name (e.g., Dolo) to auto-fetch..."
+                          title="Start typing a medicine name to fetch available batches from inventory"
                           value={item.itemName}
                           onChange={(e) => handleItemChange(index, e)}
                           className="w-full rounded-md border-indigo-100 focus:border-indigo-500 focus:ring-indigo-500"
@@ -995,6 +1008,7 @@ const handleItemChange = (index, event) => {
                       <td className="px-4 py-3">
                         <select
                           name="batch"
+                          title="Select a batch after typing the item name"
                           value={item.batch}
                           onChange={(e) => handleItemChange(index, e)}
                           className="w-full rounded-md border-indigo-100 focus:border-indigo-500 focus:ring-indigo-500"

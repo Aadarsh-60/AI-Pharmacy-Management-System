@@ -176,6 +176,7 @@ import {
 } from '../controllers/InventoryController.js';
 import Bill from '../models/Bill.js'; // Keep if needed for party name route
 import InventoryLock from '../models/InventoryLock.js';
+import { logActivity } from '../middleware/activityLogger.js';
 
 const router = express.Router();
 
@@ -323,8 +324,8 @@ router.get('/available', readLimiter, isAuthenticated, async (req, res) => {
 });
 
 // WRITE OPERATIONS (More restrictive)
-router.post('/add-update', strictWriteLimiter, speedLimiter, isAuthenticated, addOrUpdateInventoryItem);
-router.post('/update-after-sale', strictWriteLimiter, speedLimiter, isAuthenticated, processSaleAndUpdateInventory);
+router.post('/add-update', strictWriteLimiter, speedLimiter, isAuthenticated, logActivity('Update Inventory', 'Inventory'), addOrUpdateInventoryItem);
+router.post('/update-after-sale', strictWriteLimiter, speedLimiter, isAuthenticated, logActivity('Process Sale', 'Inventory'), processSaleAndUpdateInventory);
 router.put('/update-party-names', strictWriteLimiter, isAuthenticated, updateInventoryPartyNames);
 
 // CRITICAL OPERATIONS (Most restrictive)
@@ -455,11 +456,11 @@ router.get('/', isAuthenticated, getInventory); // Add authentication middleware
 
 // POST /api/inventory/add-update - Add or Update inventory item using correct logic
 // This is the endpoint your frontend should ideally use for manual adjustments
-router.post('/add-update', isAuthenticated, addOrUpdateInventoryItem); // Add authentication
+router.post('/add-update', isAuthenticated, logActivity('Update Inventory', 'Inventory'), addOrUpdateInventoryItem); // Add authentication
 
 // --- NEW ROUTE: Update inventory after sale ---
 // POST /api/inventory/update-after-sale - Process a sale and update inventory
-router.post('/update-after-sale', isAuthenticated, processSaleAndUpdateInventory);
+router.post('/update-after-sale', isAuthenticated, logActivity('Process Sale', 'Inventory'), processSaleAndUpdateInventory);
 
 // --- Utility / Specific Routes ---
 

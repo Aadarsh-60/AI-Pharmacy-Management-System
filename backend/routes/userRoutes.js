@@ -486,38 +486,4 @@ router.get('/batch-details', getBatchDetails);
 
 
 
-// Login Route
-router.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-
-    try {
-        const user = await User.findOne({ email });
-
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid credentials' });
-        }
-
-        // Check if the user has verified their email
-        if (!user.isVerified) {
-            return res.status(400).json({ message: 'Please verify your email before logging in.' });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-
-        if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid credentials' });
-        }
-
-        // Generate token for the authenticated user with both id and email
-        const token = generateToken(user._id, user.email);
-
-        // Send the token in the response
-        res.status(200).json({ token: token, email: email });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
 export default router;
-

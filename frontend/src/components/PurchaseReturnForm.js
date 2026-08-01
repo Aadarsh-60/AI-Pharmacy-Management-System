@@ -71,16 +71,16 @@ const PurchaseReturnForm = () => {
       
       try {
         console.log('Fetching inventory for email:', formData.email);
-        const response = await axios.get(`${API_BASE_URL}/api/inventory/${formData.email}`, {
+        const response = await axios.get(`${API_BASE_URL}/api/inventory/party-names/${formData.email}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
           }
         });
         
-        console.log('Inventory response:', response.data);
+        console.log('Inventory party-names response:', response.data);
         
-        // Extract unique supplier names from inventory items
-        const uniqueSuppliers = [...new Set(response.data.map(item => item.partyName))];
+        // Extract unique supplier names from the response (it is an array of strings)
+        const uniqueSuppliers = response.data;
         console.log('Unique suppliers:', uniqueSuppliers);
         
         if (uniqueSuppliers.length === 0) {
@@ -412,7 +412,7 @@ const PurchaseReturnForm = () => {
         email: formData.email
       };
 
-      const response = await axiosInstance.post(`${API_BASE_URL}/api/inventory`, testItem, {
+      const response = await axiosInstance.post(`${API_BASE_URL}/api/inventory/add-update`, testItem, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
@@ -500,7 +500,7 @@ const PurchaseReturnForm = () => {
                     className="w-full px-5 py-4 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
                     list="suppliersList"
                     required
-                    placeholder="Select supplier"
+                    placeholder="E.g., MediLife Suppliers - Type carefully"
                   />
                   <datalist id="suppliersList">
                     {suppliers.map((supplier, index) => (
@@ -527,7 +527,7 @@ const PurchaseReturnForm = () => {
                   onChange={handleInputChange}
                   className="w-full px-5 py-4 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
                   required
-                  placeholder="Enter supplier GST"
+                  placeholder="E.g., 27AADCP1234F1Z5"
                 />
               </div>
             </div>
@@ -546,45 +546,46 @@ const PurchaseReturnForm = () => {
               </div>
 
               <div className="overflow-x-auto bg-indigo-50 rounded-lg shadow-inner">
-                <table className="w-full divide-y divide-indigo-200 table-fixed">
+                <table className="min-w-full divide-y divide-indigo-200">
                   <thead>
                     <tr className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[15%]">Item Name</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Batch</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Quantity</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Returnable Qty</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Original Purchase</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Sold Qty</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Already Returned</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Purchase Rate</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">MRP</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Discount %</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">GST %</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[10%]">Expiry Date</th>
-                      <th className="px-6 py-4 text-left text-lg font-medium uppercase tracking-wider w-[5%]">Action</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Item Name</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Batch</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Quantity</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Returnable Qty</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Original Purchase</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Sold Qty</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Already Returned</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Purchase Rate</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">MRP</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Discount %</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">GST %</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Expiry Date</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-indigo-100">
                     {formData.items.map((item, index) => (
                       <tr key={index} className="hover:bg-indigo-50 transition-colors duration-150">
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="text"
                             name="itemName"
                             value={item.itemName}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             required
                             disabled={!isBillsLoaded}
-                            placeholder="Enter item name"
+                            placeholder="E.g., Dolo 650mg"
+                            title="Enter exact medicine name to fetch batches"
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <select
                             name="batch"
                             value={item.batch}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             required
                             disabled={!item.itemName}
                           >
@@ -598,84 +599,84 @@ const PurchaseReturnForm = () => {
                               ))}
                           </select>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             name="quantity"
                             value={item.quantity}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             min="1"
                             max={item.returnableQuantity}
                             required
                             disabled={!item.batch}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             value={item.returnableQuantity}
-                            className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-lg bg-gray-100"
+                            className="w-[100px] px-2 py-2 text-sm border border-gray-200 rounded bg-gray-100"
                             readOnly
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             value={item.originalPurchaseQuantity}
-                            className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-lg bg-gray-100"
+                            className="w-[100px] px-2 py-2 text-sm border border-gray-200 rounded bg-gray-100"
                             readOnly
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             value={item.soldQuantity}
-                            className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-lg bg-gray-100"
+                            className="w-[100px] px-2 py-2 text-sm border border-gray-200 rounded bg-gray-100"
                             readOnly
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             value={item.returnedQuantity}
-                            className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-lg bg-gray-100"
+                            className="w-[100px] px-2 py-2 text-sm border border-gray-200 rounded bg-gray-100"
                             readOnly
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             name="purchaseRate"
                             value={item.purchaseRate}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             min="0"
                             step="0.01"
                             required
                             disabled={!item.batch}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             name="mrp"
                             value={item.mrp}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             min="0"
                             step="0.01"
                             required
                             disabled={!item.batch}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="number"
                             name="discount"
                             value={item.discount}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             min="0"
                             max="100"
                             step="0.01"
@@ -683,7 +684,7 @@ const PurchaseReturnForm = () => {
                             disabled={!item.batch}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="text"
                             inputMode="numeric"
@@ -691,25 +692,25 @@ const PurchaseReturnForm = () => {
                             name="gstPercentage"
                             value={item.gstPercentage}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             min="0"
                             max="100"
                             required
                             disabled={!item.batch}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <input
                             type="date"
                             name="expiryDate"
                             value={item.expiryDate}
                             onChange={(e) => handleItemChange(index, e)}
-                            className="w-full px-4 py-3 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                            className="w-[120px] px-2 py-2 text-sm border border-indigo-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             required
                             disabled={!item.batch}
                           />
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2">
                           <button
                             type="button"
                             onClick={() => removeItemRow(index)}
