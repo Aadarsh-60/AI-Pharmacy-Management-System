@@ -32,13 +32,9 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      'http://localhost:3000', 
-      'http://localhost:3001', 
-      'https://medicine-inventory-system.vercel.app',
-      'https://medicine-inventory-management-frontend-ml4e.vercel.app',
-      'https://medicine-inventory-management-backend.onrender.com'
-    ],
+    origin: function (origin, callback) {
+      callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   }
@@ -49,13 +45,9 @@ global.io = io;
 
 // CORS Configuration
 const corsOptions = {
-  origin: [
-    'http://localhost:3000', 
-    'http://localhost:3001', 
-    'https://medicine-inventory-system.vercel.app',
-    'https://medicine-inventory-management-frontend-ml4e.vercel.app',
-    'https://medicine-inventory-management-backend.onrender.com'
-  ],
+  origin: function (origin, callback) {
+    callback(null, true);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
@@ -70,7 +62,7 @@ app.use(cors(corsOptions));
 // Add additional headers middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (corsOptions.origin.includes(origin)) {
+  if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
