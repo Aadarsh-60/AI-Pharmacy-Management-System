@@ -13,6 +13,10 @@
   <img src="https://img.shields.io/badge/TailwindCSS-Styling-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind" />
 </p>
 
+<p align="center">
+  <strong>🔴 Live Demo:</strong> <a href="https://pharmacy-frontend-zw64.onrender.com">https://pharmacy-frontend-zw64.onrender.com</a>
+</p>
+
 ---
 
 ## 📋 Table of Contents
@@ -358,7 +362,8 @@ The app will be available at `http://localhost:3000`.
 - **Start Command**: `cd backend && npm start`
 - Set all environment variables in Render Dashboard
 
-### Frontend — [Vercel](https://vercel.com) / [Render](https://render.com)
+### Frontend — [Render](https://render.com)
+- **Live URL**: [https://pharmacy-frontend-zw64.onrender.com](https://pharmacy-frontend-zw64.onrender.com)
 - **Build Command**: `cd frontend && npm install && npm run build`
 - **Output Directory**: `frontend/build`
 - Set `REACT_APP_API_URL` to your deployed backend URL
