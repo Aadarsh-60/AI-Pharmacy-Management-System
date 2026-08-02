@@ -29,7 +29,7 @@ const Inventory = () => {
       console.log(`[Frontend] Fetching inventory for email: ${email}`);
       const response = await axios.get(
         // Ensure this URL is correct and points to your getInventory endpoint
-        `http://localhost:5000/api/inventory?email=${encodeURIComponent(email)}`,
+        `${process.env.REACT_APP_API_URL}/api/inventory?email=${encodeURIComponent(email)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

@@ -146,7 +146,7 @@ const SellBillForm = () => {
           return;
         }
         
-        const response = await fetch('http://localhost:5000/api/bills/next-invoice-number', {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/next-invoice-number`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -202,7 +202,7 @@ const SellBillForm = () => {
       
       console.log("Generating next invoice number with:", { token, email });
       
-      const response = await fetch("http://localhost:5000/api/bills/next-invoice-number", {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/next-invoice-number`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -612,7 +612,7 @@ const handleItemChange = (index, event) => {
   //     }));
       
   //     // Make the API call to update inventory
-  //     const response = await fetch("http://localhost:5000/api/inventory/update-batch-quantities", {
+  //     const response = await fetch(`${process.env.REACT_APP_API_URL}/api/inventory/update-batch-quantities`, {
   //       method: "POST",
   //       headers: {
   //         "Content-Type": "application/json",
@@ -703,7 +703,7 @@ const handleItemChange = (index, event) => {
   
   //   try {
   //     setLoading(true);
-  //     const response = await fetch("http://localhost:5000/api/bills/sale", {
+  //     const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/sale`, {
   //       method: "POST",
   //       headers: {
   //         "Content-Type": "application/json",
@@ -803,7 +803,7 @@ const handleItemChange = (index, event) => {
 
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:5000/api/bills/sale", {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/sale`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -817,7 +817,7 @@ const handleItemChange = (index, event) => {
       // Always treat as success if pdfUrl is present
       if (responseData.pdfUrl) {
         try {
-          const pdfResponse = await fetch(`http://localhost:5000${responseData.pdfUrl}`);
+          const pdfResponse = await fetch(`${process.env.REACT_APP_API_URL}${responseData.pdfUrl}`);
           const blob = await pdfResponse.blob();
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement('a');

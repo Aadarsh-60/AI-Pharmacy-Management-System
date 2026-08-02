@@ -83,7 +83,7 @@ const SaleReturnForm = () => {
     try {
       setFetchingBills(true);
       const token = localStorage.getItem('token');
-      const response = await axiosInstance.get('http://localhost:5000/api/bills/returnable-quantities', {
+      const response = await axiosInstance.get(`${process.env.REACT_APP_API_URL}/api/bills/returnable-quantities`, {
         params: {
           email: formData.email,
           partyName: formData.customerName
@@ -433,7 +433,7 @@ const SaleReturnForm = () => {
       }
 
       // If all validations pass, submit the form
-      const response = await axiosInstance.post('http://localhost:5000/api/bills/return', formData, {
+      const response = await axiosInstance.post(`${process.env.REACT_APP_API_URL}/api/bills/return`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

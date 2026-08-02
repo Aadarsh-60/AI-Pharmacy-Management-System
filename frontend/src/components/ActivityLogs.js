@@ -10,7 +10,7 @@ const ActivityLogs = () => {
         const fetchLogs = async () => {
             try {
                 const token = localStorage.getItem('token') || localStorage.getItem('authToken');
-                const response = await axios.get('http://localhost:5000/api/activity-logs', {
+                const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/activity-logs`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (response.data.success) {

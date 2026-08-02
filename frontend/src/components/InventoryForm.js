@@ -308,7 +308,7 @@
 //       }
 
 //       // Make API call with email directly in the URL
-//       const response = await axios.get(`http://localhost:5000/api/inventory/${email}`);
+//       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/inventory/${email}`);
 //       setInventoryItems(response.data);  // Assuming response.data is an array of inventory items
 //     } catch (error) {
 //       console.error("Error fetching inventory:", error);
@@ -491,7 +491,7 @@ const Inventory = () => {
       console.log(`[Frontend] Fetching inventory for email: ${email}`);
       const response = await axiosInstance.get(
         // Ensure this URL is correct and points to your getInventory endpoint
-        `http://localhost:5000/api/inventory?email=${encodeURIComponent(email)}`,
+        `${process.env.REACT_APP_API_URL}/api/inventory?email=${encodeURIComponent(email)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

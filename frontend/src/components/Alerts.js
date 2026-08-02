@@ -78,7 +78,7 @@ const Alerts = () => {
 
         // Get inventory data for alerts
         const token = localStorage.getItem('token') || localStorage.getItem('authToken');
-        const response = await axios.get(`http://localhost:5000/api/inventory?email=${email}`, {
+        const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/inventory?email=${email}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const inventoryData = response.data;

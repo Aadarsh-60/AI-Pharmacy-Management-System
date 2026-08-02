@@ -12,7 +12,7 @@
 
 //   const fetchInventory = async () => {
 //     try {
-//       const response = await axios.get('http://localhost:5000/api/inventory'); // Ensure this endpoint matches your backend
+//       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/inventory`); // Ensure this endpoint matches your backend
 //       setInventory(response.data); // Assuming response.data is an array of inventory items
 //     } catch (error) {
 //       console.error('Error fetching inventory:', error);
@@ -75,7 +75,7 @@
 //       }
 
 //       // Use the email directly in the API call
-//       const response = await axios.get(`http://localhost:5000/api/inventory/${email}`);
+//       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/inventory/${email}`);
 //       console.log("Inventory response:", response.data);  // Check the response data
 //       setInventory(response.data); // Assuming response.data is an array of inventory items
 //     } catch (error) {
@@ -161,7 +161,7 @@ const Inventory = () => {
       }
 
       const response = await fetch(
-        `http://localhost:5000/api/inventory?email=${encodeURIComponent(email)}`,
+        `${process.env.REACT_APP_API_URL}/api/inventory?email=${encodeURIComponent(email)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

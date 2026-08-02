@@ -37,7 +37,7 @@ const AddMedicine = () => {
                 email
             };
 
-            const response =await axiosInstance.post('http://localhost:5000/api/inventory', dataToSend, {
+            const response =await axiosInstance.post(`${process.env.REACT_APP_API_URL}/api/inventory`, dataToSend, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }

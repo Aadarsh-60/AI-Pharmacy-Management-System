@@ -36,7 +36,7 @@
 //     }
 
 //     try {
-//       const response = await axiosInstance.post('http://localhost:5000/api/users/register', formData);
+//       const response = await axiosInstance.post(`${process.env.REACT_APP_API_URL}/api/users/register`, formData);
 //       setFormData({ name: '', email: '', password: '', confirmPassword: '', gstNo: '' }); // Reset form
 //       setVerificationStep(true);
       
@@ -285,7 +285,7 @@ const Register = () => {
 
     try {
       const response = await axiosInstance.post(
-        'http://localhost:5000/api/users/register', 
+        `${process.env.REACT_APP_API_URL}/api/users/register`, 
         formData
       );
       
@@ -336,7 +336,7 @@ const Register = () => {
 
     try {
       const response = await axiosInstance.post(
-        'http://localhost:5000/api/users/verify-email',
+        `${process.env.REACT_APP_API_URL}/api/users/verify-email`,
         {
           email: registeredEmail,
           verificationCode: verificationCode.trim()
@@ -381,7 +381,7 @@ const Register = () => {
 
     try {
       await axiosInstance.post(
-        'http://localhost:5000/api/users/resend-verification',
+        `${process.env.REACT_APP_API_URL}/api/users/resend-verification`,
         { email: registeredEmail }
       );
 

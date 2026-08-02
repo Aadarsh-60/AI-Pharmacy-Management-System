@@ -25,7 +25,7 @@ const Report = () => {
                 return;
             }
 
-            const response = await axios.get('http://localhost:5000/api/bills/medicine-sales', {
+            const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/bills/medicine-sales`, {
                 params: searchParams,
                 headers: {
                     Authorization: `Bearer ${token}`

@@ -32,7 +32,7 @@ const PartyInvoiceSearch = () => {
       }
 
       const response = await fetch(
-        `http://localhost:5000/api/bills/party-invoices/${encodeURIComponent(partyName)}`,
+        `${process.env.REACT_APP_API_URL}/api/bills/party-invoices/${encodeURIComponent(partyName)}`,
         {
           method: 'GET',
           headers: {

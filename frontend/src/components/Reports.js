@@ -7,7 +7,7 @@ import axiosInstance from '../utils/axios';
 
 // Create axios instance with interceptors
 const api = axiosInstance.create({
-  baseURL: 'http://localhost:5000/api/bills/medicine-sales'
+  baseURL: `${process.env.REACT_APP_API_URL}/api/bills/medicine-sales`
 });
 
 const MedicineSalesSummary = () => {
