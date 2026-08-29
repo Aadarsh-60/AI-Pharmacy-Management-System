@@ -5,19 +5,21 @@ import dotenv from 'dotenv';
 // Load environment variables from .env file
 dotenv.config({ path: './config/.env' });
 
-// Configure the email transport (you can use Gmail or any service)
+// Configure the email transport using Brevo (smtp-relay.brevo.com)
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // You can use other email services like SendGrid, etc.
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false, // TLS - use STARTTLS
     auth: {
-        user: process.env.EMAIL_USER,  // Your email address (for Gmail, use the full address)
-        pass: process.env.EMAIL_PASS   // Your email password or app-specific password
+        user: process.env.BREVO_SMTP_USER,  // Brevo account email
+        pass: process.env.BREVO_SMTP_KEY    // Brevo SMTP Key
     }
 });
 
 // Utility function to send emails
 export const sendEmail = async ({ to, subject, html }) => {
     const mailOptions = {
-        from: process.env.EMAIL_USER, // Sender address
+        from: `"Pharmacy Management System" <${process.env.BREVO_FROM_EMAIL}>`, // Sender address
         to,                          // Recipient address
         subject,                     // Subject line
         html,                        // HTML body content
@@ -35,7 +37,7 @@ export const sendEmail = async ({ to, subject, html }) => {
 // Updated function to send 6-digit verification code email
 export const sendVerificationCodeEmail = async (email, verificationCode) => {
     const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: `"Pharmacy Management System" <${process.env.BREVO_FROM_EMAIL}>`,
         to: email,
         subject: 'Email Verification - Pharmacy Management System',
         html: `
@@ -132,7 +134,7 @@ export const sendExpiryNotificationEmail = async (recipientEmail, expiringItems)
     }).join('');
 
     const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: `"Pharmacy Management System" <${process.env.BREVO_FROM_EMAIL}>`,
         to: recipientEmail,
         subject: 'Expiring Items Notification',
         html: `The following items are expiring soon:<br/><br/>${itemsList}`

@@ -169,26 +169,52 @@ router.post('/register', async (req, res) => {
         console.log('🔍 Checking if user exists...');
         const userExists = await User.findOne({ email: normalizedEmail });
         if (userExists) {
-            console.log('❌ User already exists');
-            return res.status(400).json({ 
-                success: false,
-                message: 'User already exists' 
+            // If already verified, block registration
+            if (userExists.isVerified) {
+                console.log('❌ User already exists and is verified');
+                return res.status(400).json({ 
+                    success: false,
+                    message: 'An account with this email already exists. Please login.' 
+                });
+            }
+            // If NOT verified — send email FIRST, then update DB
+            console.log('⚠️ User exists but unverified — resending OTP...');
+            const hashedPassword = await bcrypt.hash(password, 10);
+            const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+            const verificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+            console.log('📨 Sending verification email first...');
+            await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+            console.log('✅ Email sent — now updating user in DB...');
+
+            userExists.name = name;
+            userExists.password = hashedPassword;
+            userExists.gstNo = gstNo;
+            userExists.verificationCode = verificationCode;
+            userExists.verificationExpires = verificationExpires;
+            await userExists.save();
+            console.log('✅ Unverified user updated in DB');
+
+            return res.status(200).json({
+                success: true,
+                message: 'A new verification code has been sent to your email.',
+                user: { email: normalizedEmail, name, isVerified: false }
             });
         }
 
         console.log('🔐 Hashing password...');
-        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
         console.log('🎲 Generating verification code...');
-        // Generate a 6-digit verification code
         const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-        
-        // Set expiration time (10 minutes from now)
         const verificationExpires = new Date(Date.now() + 10 * 60 * 1000);
 
+        // 📨 Send email FIRST — only save to DB if email succeeds
+        console.log('📨 Sending verification email first...');
+        await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+        console.log('✅ Verification email sent');
+
         console.log('👤 Creating user object...');
-        // Create a new user instance
         const user = new User({
             name,
             email: normalizedEmail,
@@ -200,14 +226,8 @@ router.post('/register', async (req, res) => {
         });
 
         console.log('💾 Saving user to database...');
-        // Save the user to the database
         await user.save();
         console.log('✅ User saved successfully');
-
-        console.log('📨 Sending verification email...');
-        // Send verification email with 6-digit code
-        await sendVerificationCodeEmail(normalizedEmail, verificationCode);
-        console.log('✅ Verification email sent');
 
         // Send a response to the client
         res.status(201).json({ 

@@ -49,8 +49,9 @@ const Register = () => {
     setError('');
 
     // Validations
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{6,}$/;
+    if (!passwordRegex.test(formData.password)) {
+      setError('Password must be at least 6 characters and contain a mix of uppercase, lowercase letters, numbers, and special characters.');
       return;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -136,9 +137,15 @@ const Register = () => {
     </div>
   );
 
-  // Email Verification Component - dark theme
   const EmailVerification = () => {
     const otpInputs = React.useRef([]);
+
+    React.useEffect(() => {
+      // Auto-focus the first input when the component mounts
+      if (otpInputs.current[0]) {
+        otpInputs.current[0].focus();
+      }
+    }, []);
 
     const handleOtpChange = (e, idx) => {
       const val = e.target.value.replace(/[^0-9]/g, '');

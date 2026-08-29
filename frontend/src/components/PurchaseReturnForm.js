@@ -129,8 +129,29 @@ const PurchaseReturnForm = () => {
         } else {
           setReturnableItems(response.data.items);
           setIsBillsLoaded(true);
-          // Auto-fill the supplier name
-          setFormData(prev => ({ ...prev, supplierName: response.data.supplierName || prev.supplierName }));
+
+          // Auto-populate the form items table with the loaded items
+          const loadedItems = response.data.items.map(item => ({
+            itemName: item.itemName,
+            batch: item.batch,
+            quantity: 0, // User will input how much they want to return
+            purchaseRate: item.purchaseRate || 0,
+            mrp: item.mrp || 0,
+            discount: item.discount || 0,
+            gstPercentage: item.gstPercentage || 0,
+            expiryDate: item.expiryDate || '',
+            returnableQuantity: item.returnableQuantity,
+            originalPurchaseQuantity: item.originalPurchaseQuantity || item.purchasedQuantity || 0,
+            soldQuantity: item.soldQuantity || 0,
+            returnedQuantity: item.returnedQuantity || 0,
+            currentInventoryQuantity: item.currentInventoryQuantity || 0
+          }));
+
+          setFormData(prev => ({ 
+            ...prev, 
+            supplierName: response.data.supplierName || prev.supplierName,
+            items: loadedItems.length > 0 ? loadedItems : prev.items
+          }));
         }
       } else {
         setError('No returnable items found for this invoice.');
