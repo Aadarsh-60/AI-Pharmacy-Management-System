@@ -49,7 +49,7 @@ function Dashboard() {
     topCustomers: [],
     topSuppliers: []
   });
-  
+
   // Real-time activity metrics
   const [activityMetrics, setActivityMetrics] = useState({
     dailySales: "₹0",
@@ -61,11 +61,11 @@ function Dashboard() {
   const dataFetchedRef = useRef(false);
   const socketConnectedRef = useRef(false);
   const fetchTimeout = useRef(null);
-  
+
   // Process inventory data for low stock and expiring items
   const processInventoryData = useCallback((inventoryData) => {
     console.log('Processing inventory data:', inventoryData);
-    
+
     if (!inventoryData || !Array.isArray(inventoryData)) {
       console.warn('Invalid inventory data received:', inventoryData);
       return;
@@ -96,7 +96,7 @@ function Dashboard() {
       if (item.expiryDate) {
         const expirationDate = new Date(item.expiryDate);
         const daysToExpire = Math.ceil((expirationDate - currentDate) / (1000 * 3600 * 24));
-        
+
         if (daysToExpire > 0 && daysToExpire <= expiringSoonThreshold) {
           expiringSoonItems.push({
             name: item.itemName || item.name,
@@ -134,13 +134,13 @@ function Dashboard() {
   // Generate purchase suggestions
   const generatePurchaseSuggestions = useCallback((lowStockItems, inventoryData) => {
     const suggestions = [];
-    
+
     // Suggest reordering for low stock items
     lowStockItems.forEach(item => {
-      const inventoryItem = inventoryData.find(inv => 
+      const inventoryItem = inventoryData.find(inv =>
         (inv.itemName || inv.name) === item.name
       );
-      
+
       if (inventoryItem) {
         const suggestedQuantity = Math.max(50, item.quantity * 5); // Suggest 5x current stock or minimum 50
         suggestions.push({
@@ -183,10 +183,10 @@ function Dashboard() {
 
   const fetchUserEmail = useCallback(() => {
     let userEmail = null;
-    
+
     // Try multiple sources for email
     userEmail = localStorage.getItem("email");
-    
+
     if (!userEmail) {
       const userJson = localStorage.getItem("user");
       if (userJson) {
@@ -198,7 +198,7 @@ function Dashboard() {
         }
       }
     }
-    
+
     // Also fetch name
     const storedName = localStorage.getItem("name");
     if (storedName) {
@@ -207,10 +207,10 @@ function Dashboard() {
       // Fallback: Use the part before @ if name is not found
       setUserName(userEmail.split('@')[0]);
     }
-    
+
     const emailToUse = userEmail || "Guest";
     setEmail(emailToUse);
-    
+
     return userEmail;
   }, []);
 
@@ -231,7 +231,7 @@ function Dashboard() {
       });
 
       console.log('Inventory response:', inventoryRes.data);
-      
+
       const inventoryData = inventoryRes.data;
       if (Array.isArray(inventoryData)) {
         setInventoryCount(inventoryData.length);
@@ -278,8 +278,8 @@ function Dashboard() {
 
       if (response.data && response.data.salesDetails) {
         const sales = response.data.salesDetails;
-        
-        const totalRevenue = sales.reduce((sum, sale) => 
+
+        const totalRevenue = sales.reduce((sum, sale) =>
           sum + (sale.mrp * sale.quantity - sale.discount), 0);
 
         const uniqueInvoices = [...new Set(sales.map(sale => sale.saleInvoiceNumber))];
@@ -293,7 +293,7 @@ function Dashboard() {
         }, {});
 
         const topSellingMedicines = Object.entries(medicineMap)
-          .sort(([,a], [,b]) => b - a)
+          .sort(([, a], [, b]) => b - a)
           .slice(0, 5)
           .map(([name, quantity]) => ({ name, quantity }));
 
@@ -449,7 +449,7 @@ function Dashboard() {
     if (socket) {
       socket.disconnect();
     }
-    
+
     localStorage.removeItem("token");
     localStorage.removeItem("email");
     localStorage.removeItem("authToken");
@@ -464,8 +464,8 @@ function Dashboard() {
 
   const handlePurchaseSuggestionClick = (suggestion) => {
     // Navigate to purchase/inventory page with suggestion data
-    navigate('/inventory', { 
-      state: { 
+    navigate('/inventory', {
+      state: {
         suggestion,
         action: 'purchase'
       }
@@ -505,7 +505,7 @@ function Dashboard() {
                 <span>Live</span>
               </span>
             )}
-            <span 
+            <span
               onClick={handleAlertClick}
               className="bg-teal-100 text-teal-800 px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-teal-200 transition-colors"
             >
@@ -525,21 +525,21 @@ function Dashboard() {
               <h2 className="text-xl font-bold text-gray-900">Inventory Health</h2>
             </div>
             <div className="space-y-4">
-              <MetricItem 
+              <MetricItem
                 label="Total Medicines"
                 value={inventoryCount}
                 icon="📦"
                 color="teal"
                 onClick={() => navigate("/inventory")}
               />
-              <MetricItem 
+              <MetricItem
                 label="Low Stock"
                 value={lowStockCount}
                 icon="⚠️"
                 color="amber"
                 onClick={handleAlertClick}
               />
-              <MetricItem 
+              <MetricItem
                 label="Expiring Soon"
                 value={expiringSoonCount}
                 icon="⌛"
@@ -560,18 +560,17 @@ function Dashboard() {
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {purchaseSuggestions.length > 0 ? (
                 purchaseSuggestions.slice(0, 5).map((suggestion, index) => (
-                  <div 
+                  <div
                     key={index}
                     onClick={() => handlePurchaseSuggestionClick(suggestion)}
                     className="p-3 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg cursor-pointer hover:shadow-md transition-all border border-orange-100"
                   >
                     <div className="flex justify-between items-start mb-1">
                       <h4 className="font-semibold text-gray-800 text-sm">{suggestion.itemName}</h4>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        suggestion.priority === 'high' ? 'bg-red-100 text-red-700' :
-                        suggestion.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs ${suggestion.priority === 'high' ? 'bg-red-100 text-red-700' :
+                          suggestion.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                        }`}>
                         {suggestion.priority}
                       </span>
                     </div>
@@ -603,13 +602,13 @@ function Dashboard() {
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-800 mb-4">Quick Stats</h3>
                 <div className="grid grid-cols-1 gap-4">
-                  <ActivityItem 
+                  <ActivityItem
                     title="Today's Sales"
                     amount={activityMetrics.dailySales}
                     icon="💰"
                     color="green"
                   />
-                  <ActivityItem 
+                  <ActivityItem
                     title="Monthly Revenue"
                     amount={activityMetrics.monthlySales}
                     icon="📆"
@@ -790,28 +789,28 @@ function Dashboard() {
             <h2 className="text-xl font-bold text-gray-900">Quick Actions</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <ActionButton 
+            <ActionButton
               label="Sales Report"
               icon="💰"
               description="Daily/Weekly/Monthly sales trends"
               onClick={() => navigate("/medicine-sales-summary")}
               gradient="from-green-400 to-blue-400"
             />
-            <ActionButton 
+            <ActionButton
               label="Inventory Report"
               icon="📦"
               description="Stock levels & valuation"
               onClick={() => navigate("/view-inventory")}
               gradient="from-teal-400 to-cyan-400"
             />
-            <ActionButton 
+            <ActionButton
               label="Purchase History"
               icon="🕰️"
               description="Detailed purchase records"
               onClick={() => navigate("/purchase-history")}
               gradient="from-purple-500 to-pink-500"
             />
-            <ActionButton 
+            <ActionButton
               label="Generate Bill"
               icon="🧾"
               description="Create new purchase/sell/return bills"
@@ -834,7 +833,7 @@ const MetricItem = ({ label, value, icon, color, onClick }) => {
   };
 
   return (
-    <div 
+    <div
       onClick={onClick}
       className="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer"
     >
@@ -870,7 +869,7 @@ const ActivityItem = ({ title, amount, icon, color }) => {
 };
 
 const ActionButton = ({ label, icon, description, onClick, gradient }) => (
-  <button 
+  <button
     onClick={onClick}
     className={`group relative flex flex-col items-center p-6 rounded-xl bg-gradient-to-br ${gradient} 
       hover:shadow-xl transition-all transform hover:scale-[1.02] min-h-[180px] justify-between

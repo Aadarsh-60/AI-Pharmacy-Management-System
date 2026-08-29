@@ -41,6 +41,7 @@ const SaleReturnForm = () => {
   const [success, setSuccess] = useState('');
   const [fetchingBills, setFetchingBills] = useState(false);
   const [showLoadBillButton, setShowLoadBillButton] = useState(false);
+  const [originalInvoiceNumber, setOriginalInvoiceNumber] = useState('');
 
   // Check authentication status immediately
   useEffect(() => {
@@ -69,15 +70,15 @@ const SaleReturnForm = () => {
     checkAuthentication();
   }, [navigate]);
 
-  // Fetch medicines when customer name is entered
+  // Fetch medicines when invoice number is entered
   useEffect(() => {
-    if (formData.customerName && formData.email) {
+    if (originalInvoiceNumber && formData.email) {
       setShowLoadBillButton(true);
     } else {
       setShowLoadBillButton(false);
       setSaleBills([]);
     }
-  }, [formData.customerName, formData.email]);
+  }, [originalInvoiceNumber, formData.email]);
 
   const handleLoadBill = async () => {
     try {
@@ -86,16 +87,23 @@ const SaleReturnForm = () => {
       const response = await axiosInstance.get(`${process.env.REACT_APP_API_URL}/api/bills/returnable-quantities`, {
         params: {
           email: formData.email,
-          partyName: formData.customerName
+          partyName: formData.customerName,
+          invoiceNumber: originalInvoiceNumber
         },
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      if (response.data && Array.isArray(response.data)) {
+      if (response.data && response.data.items && Array.isArray(response.data.items)) {
+        // Auto-fill the customer name from the bill
+        setFormData(prevState => ({
+            ...prevState,
+            customerName: response.data.partyName || prevState.customerName
+        }));
+
         // Store the medicines data with available quantities
-        const formattedMedicines = response.data.map(medicine => ({
+        const formattedMedicines = response.data.items.map(medicine => ({
           itemName: medicine.itemName,
           batch: medicine.batch,
           quantity: medicine.returnableQuantity, // Available to return
@@ -145,13 +153,13 @@ const SaleReturnForm = () => {
         });
 
         setSaleBills(formattedMedicines);
-        setFormData(prevState => ({ ...prevState, items: autoPopulatedItems }));
+        setFormData(prevState => ({ ...prevState, items: autoPopulatedItems, customerName: response.data.partyName || prevState.customerName }));
         calculateTotals(autoPopulatedItems);
         
         setSuccess('Medicines loaded successfully');
         setTimeout(() => setSuccess(''), 3000);
       } else {
-        setError('No medicines found for this customer');
+        setError('No sale bill found or no returnable medicines available.');
         setTimeout(() => setError(''), 3000);
       }
     } catch (err) {
@@ -436,7 +444,8 @@ const SaleReturnForm = () => {
       const response = await axiosInstance.post(`${process.env.REACT_APP_API_URL}/api/bills/return`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `salereturn-${formData.returnInvoiceNumber || Date.now()}`
         }
       });
       
@@ -716,43 +725,41 @@ const SaleReturnForm = () => {
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Customer Name</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      name="customerName"
-                      value={formData.customerName}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="E.g., Rahul Sharma - Type precisely for tracking"
-                      required
-                    />
-                  </div>
+              <div className="relative group">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Original Invoice / Receipt No.</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={originalInvoiceNumber}
+                    onChange={(e) => setOriginalInvoiceNumber(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter Original Sale Invoice No (e.g. INV001)"
+                  />
                 </div>
+              </div>
 
-                {showLoadBillButton && (
-                  <div className="flex items-end">
-                    <button
-                      type="button"
-                      onClick={handleLoadBill}
-                      disabled={fetchingBills}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400"
-                    >
-                      {fetchingBills ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Loading...
-                        </>
-                      ) : (
-                        'Load Bill'
-                      )}
-                    </button>
-                  </div>
-                )}
+              <div className="relative group">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Customer Name</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    name="customerName"
+                    value={formData.customerName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Auto-filled from Invoice, or enter Customer Name"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLoadBill}
+                    disabled={fetchingBills || (!originalInvoiceNumber && !formData.customerName)}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 whitespace-nowrap"
+                  >
+                    {fetchingBills ? 'Loading...' : 'Load Bill'}
+                  </button>
+                </div>
+              </div>
               </div>
 
               {/* Items Section */}

@@ -1846,10 +1846,11 @@ export const getNextInvoiceNumber = async (req, res) => {
 
       // Format the next invoice number (e.g., INV001, INV010, INV100)
       const invoiceNumber = `INV${String(nextNumber).padStart(3, '0')}`;
-      console.log("Generated invoice number:", invoiceNumber);
+      const receiptNumber = `REC${String(nextNumber).padStart(3, '0')}`;
+      console.log("Generated invoice number:", invoiceNumber, "Generated receipt number:", receiptNumber);
 
       // Send the successfully generated number
-      return res.status(200).json({ invoiceNumber });
+      return res.status(200).json({ invoiceNumber, receiptNumber });
 
   } catch (error) {
       console.error('Error in getNextInvoiceNumber:', error);

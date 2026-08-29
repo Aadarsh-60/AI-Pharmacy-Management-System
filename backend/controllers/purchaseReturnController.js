@@ -8,17 +8,40 @@ import { emitToAll, SOCKET_EVENTS } from '../utils/socketUtils.js';
 // Get returnable quantities for a supplier
 export const getReturnableQuantities = async (req, res) => {
     try {
-        const { email, supplierName } = req.query;
-        console.log('Query params:', { email, supplierName });
+        const { email, supplierName, invoiceNumber } = req.query;
+        console.log('Query params:', { email, supplierName, invoiceNumber });
 
-        if (!email || !supplierName) {
-            return res.status(400).json({ message: 'Email and supplier name are required' });
+        if (!email || (!supplierName && !invoiceNumber)) {
+            return res.status(400).json({ message: 'Email and either supplier name or invoice number are required' });
+        }
+
+        let actualSupplierName = supplierName;
+        let billItems = null;
+
+        if (invoiceNumber) {
+            const cleanInvoiceNumber = invoiceNumber.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const invoiceRegex = new RegExp(`^\\s*${cleanInvoiceNumber}\\s*$`, 'i');
+            
+            const bill = await Bill.findOne({
+                email,
+                $or: [
+                    { supplierInvoiceNumber: invoiceRegex },
+                    { receiptNumber: invoiceRegex }
+                ]
+            });
+
+            if (!bill) {
+                return res.status(404).json({ message: 'Purchase bill not found for the given invoice/receipt number' });
+            }
+
+            actualSupplierName = bill.partyName;
+            billItems = bill.items;
         }
 
         // Get all purchase bills for the supplier
         const purchaseBills = await Bill.find({
             email,
-            partyName: supplierName
+            partyName: { $regex: new RegExp(`^\\s*${actualSupplierName.trim().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*$`, 'i') }
         });
 
         console.log('Found purchase bills for supplier:', purchaseBills.length);
@@ -35,7 +58,7 @@ export const getReturnableQuantities = async (req, res) => {
         // Get all return bills for the supplier
         const returnBills = await PurchaseReturnBill.find({
             email,
-            supplierName
+            supplierName: { $regex: new RegExp(`^\\s*${actualSupplierName.trim().replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*$`, 'i') }
         });
 
         console.log('Found return bills for supplier:', returnBills.length);
@@ -143,7 +166,18 @@ export const getReturnableQuantities = async (req, res) => {
             return a.itemName.toLowerCase().localeCompare(b.itemName.toLowerCase());
         });
 
-        res.json(returnableQuantities);
+        let finalReturnableQuantities = returnableQuantities;
+        if (billItems) {
+            const billItemKeys = new Set(billItems.map(item => `${item.itemName.toLowerCase()}-${item.batch}`));
+            finalReturnableQuantities = returnableQuantities.filter(item => 
+                billItemKeys.has(`${item.itemName.toLowerCase()}-${item.batch}`)
+            );
+        }
+
+        res.json({
+            supplierName: actualSupplierName,
+            items: finalReturnableQuantities
+        });
     } catch (error) {
         console.error('Error getting returnable quantities:', error);
         res.status(500).json({ message: 'Error getting returnable quantities', error: error.message });

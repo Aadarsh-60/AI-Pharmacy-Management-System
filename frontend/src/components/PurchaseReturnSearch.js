@@ -12,6 +12,13 @@ const PurchaseReturnSearch = () => {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('search');
   
+  useEffect(() => {
+    const storedEmail = localStorage.getItem('email');
+    if (storedEmail) {
+      setEmail(storedEmail);
+    }
+  }, []);
+  
   // Filter states
   const [filters, setFilters] = useState({
     searchTerm: '',
@@ -109,8 +116,9 @@ const PurchaseReturnSearch = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="example@email.com"
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none transition-all duration-200"
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:outline-none transition-all duration-200 bg-gray-50 cursor-not-allowed"
                 required
+                readOnly
               />
             </div>
           </div>

@@ -67,13 +67,19 @@ const Sidebar = ({ children }) => {
         { path: '/forecasting', label: 'Smart Forecasting', icon: '📈' },
       ]
     },
+    {
+      section: 'Support',
+      items: [
+        { path: '/support', label: 'Report Issue', icon: '🛠️' },
+      ]
+    },
   ];
 
   const role = localStorage.getItem('role') || 'user';
   if (role === 'admin') {
-      menuItems.find(m => m.section === 'Reports').items.push(
-          { path: '/activity-logs', label: 'Activity Logs', icon: '📝' }
-      );
+    menuItems.find(m => m.section === 'Reports').items.push(
+      { path: '/activity-logs', label: 'Activity Logs', icon: '📝' }
+    );
   }
 
   const isActive = (path) => location.pathname === path;
@@ -220,6 +226,13 @@ const Sidebar = ({ children }) => {
 
           {/* Right side */}
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => navigate('/support')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all duration-300 ${isDark ? 'bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-200'}`}
+            >
+              <span>🛠️</span>
+              <span className="hidden sm:inline">Report Issue</span>
+            </button>
             <button
               onClick={toggleTheme}
               className={`p-2 rounded-full transition-all duration-300 ${isDark ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}

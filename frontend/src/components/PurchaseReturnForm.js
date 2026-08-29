@@ -36,6 +36,7 @@ const PurchaseReturnForm = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isBillsLoaded, setIsBillsLoaded] = useState(false);
+  const [originalInvoiceNumber, setOriginalInvoiceNumber] = useState('');
   const [calculations, setCalculations] = useState({
     totalAmount: 0,
     totalDiscount: 0,
@@ -107,30 +108,33 @@ const PurchaseReturnForm = () => {
   }, [formData.email]);
 
   const handleLoadBills = async () => {
-    if (!formData.supplierName || !formData.email) {
-      setError('Please enter supplier name');
-      return;
-    }
-
     try {
       setLoading(true);
       setError('');
       const response = await axiosInstance.get(`${API_BASE_URL}/api/purchase-returns/returnable-quantities`, {
         params: {
           email: formData.email,
-          supplierName: formData.supplierName
+          supplierName: formData.supplierName,
+          invoiceNumber: originalInvoiceNumber
         },
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
       });
       
-      if (response.data.length === 0) {
-        setError('No returnable items found for this supplier.');
-        setReturnableItems([]);
+      if (response.data && response.data.items && Array.isArray(response.data.items)) {
+        if (response.data.items.length === 0) {
+          setError('No returnable items found for this invoice.');
+          setReturnableItems([]);
+        } else {
+          setReturnableItems(response.data.items);
+          setIsBillsLoaded(true);
+          // Auto-fill the supplier name
+          setFormData(prev => ({ ...prev, supplierName: response.data.supplierName || prev.supplierName }));
+        }
       } else {
-        setReturnableItems(response.data);
-        setIsBillsLoaded(true);
+        setError('No returnable items found for this invoice.');
+        setReturnableItems([]);
       }
     } catch (err) {
       console.error('Error fetching returnable quantities:', err);
@@ -333,6 +337,10 @@ const PurchaseReturnForm = () => {
         const response = await axiosInstance.post(`${API_BASE_URL}/api/purchase-returns/create`, {
             ...formData,
             date: formData.date
+        }, {
+            headers: {
+                'Idempotency-Key': `purchasereturn-${formData.returnInvoiceNumber || Date.now()}`
+            }
         });
 
         if (response.data.success) {
@@ -490,6 +498,19 @@ const PurchaseReturnForm = () => {
               </div>
               
               <div className="relative group">
+                <label className="block text-lg font-semibold text-gray-700 mb-2">Original Invoice / Receipt No.</label>
+                <div className="flex space-x-3">
+                  <input
+                    type="text"
+                    value={originalInvoiceNumber}
+                    onChange={(e) => setOriginalInvoiceNumber(e.target.value)}
+                    className="w-full px-5 py-4 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                    placeholder="Enter Original Purchase Invoice No"
+                  />
+                </div>
+              </div>
+
+              <div className="relative group">
                 <label className="block text-lg font-semibold text-gray-700 mb-2">Supplier Name</label>
                 <div className="flex space-x-3">
                   <input
@@ -497,10 +518,10 @@ const PurchaseReturnForm = () => {
                     name="supplierName"
                     value={formData.supplierName}
                     onChange={handleInputChange}
-                    className="w-full px-5 py-4 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
+                    className="w-full px-5 py-4 text-lg border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 bg-gray-50"
                     list="suppliersList"
                     required
-                    placeholder="E.g., MediLife Suppliers - Type carefully"
+                    placeholder="Auto-filled from Original Invoice, or Type Supplier Name manually"
                   />
                   <datalist id="suppliersList">
                     {suppliers.map((supplier, index) => (
@@ -510,7 +531,7 @@ const PurchaseReturnForm = () => {
                   <button
                     type="button"
                     onClick={handleLoadBills}
-                    disabled={loading || !formData.supplierName}
+                    disabled={loading || (!originalInvoiceNumber && !formData.supplierName)}
                     className="px-6 py-4 text-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-300 shadow-md whitespace-nowrap"
                   >
                     {loading ? 'Loading...' : 'Load Bills'}

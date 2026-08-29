@@ -319,7 +319,7 @@ const Inventory = () => {
       </div>
       
       {/* Dashboard Cards */}
-      <div className="container mx-auto px-4 -mt-6">
+      <div className="container mx-auto px-4 pt-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-lg shadow-lg p-5 border-b-4 border-indigo-500 transition-all hover:shadow-xl">
             <div className="flex justify-between items-center">

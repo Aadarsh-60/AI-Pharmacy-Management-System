@@ -15,7 +15,7 @@ const useItems = (initialGstNumber) => {
       availableQuantity: 0,
       quantity: "",
       mrp: "",
-      discount: "",
+      discount: "20",
       amount: "",
       gstNo: initialGstNumber,
       gstPercentage: "0"
@@ -40,7 +40,7 @@ const useItems = (initialGstNumber) => {
             availableQuantity: 0,
             quantity: "",
             mrp: "",
-            discount: "",
+            discount: "20",
             amount: "",
             gstNo: initialGstNumber,
             gstPercentage: "0"
@@ -55,7 +55,7 @@ const useItems = (initialGstNumber) => {
           availableQuantity: 0,
           quantity: "",
           mrp: "",
-          discount: "",
+          discount: "20",
           amount: "",
           gstNo: initialGstNumber,
           gstPercentage: "0"
@@ -168,7 +168,7 @@ const SellBillForm = () => {
           ...prev,
           saleInvoiceNumber: data.invoiceNumber || "INV001", // Fallback to INV001 if no invoice number
           date: new Date().toISOString().split("T")[0],
-          receiptNumber: "",
+          receiptNumber: data.receiptNumber || "REC001",
           partyName: "",
           email: "",
           gstNumber: "",
@@ -183,7 +183,7 @@ const SellBillForm = () => {
           ...prev,
           saleInvoiceNumber: "INV001",
           date: new Date().toISOString().split("T")[0],
-          receiptNumber: "",
+          receiptNumber: "REC001",
           partyName: "",
           email: "",
           gstNumber: "",
@@ -216,7 +216,7 @@ const SellBillForm = () => {
       console.log("Response data:", responseData);
       
       if (response.ok) {
-        return responseData.invoiceNumber;
+        return responseData;
       } else {
         setMessage(`Error generating next invoice number: ${responseData.message || 'Unknown error'}`);
         return null;
@@ -230,12 +230,12 @@ const SellBillForm = () => {
 
   // Reset function to also handle invoice number generation
   const resetForm = async () => {
-    const nextInvoiceNumber = await generateNextInvoiceNumber();
-    if (nextInvoiceNumber) {
+    const nextInvoiceData = await generateNextInvoiceNumber();
+    if (nextInvoiceData) {
       setSellDetails(prev => ({
         ...prev,
-        saleInvoiceNumber: nextInvoiceNumber,
-        receiptNumber: "",
+        saleInvoiceNumber: nextInvoiceData.invoiceNumber,
+        receiptNumber: nextInvoiceData.receiptNumber || "REC001",
         partyName: "",
         email: "",
         gstNumber: "",
@@ -808,6 +808,7 @@ const handleItemChange = (index, event) => {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "Idempotency-Key": `sale-${sellDetails.saleInvoiceNumber}`
         },
         body: JSON.stringify(body),
       });

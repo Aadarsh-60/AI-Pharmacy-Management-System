@@ -10,7 +10,7 @@ export const generateForecast = async (req, res) => {
     const { email } = req.query; // pharmacist email to filter
 
     if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ success: false, message: 'GEMINI_API_KEY is not configured in backend/.env' });
+        return res.status(500).json({ success: false, message: 'GEMINI_API_KEY is not configured in backend/config/.env' });
     }
 
     // 1. Fetch Sales Data for the last 30 days

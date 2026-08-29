@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const PartyInvoiceSearch = () => {
-  const [partyName, setPartyName] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -32,7 +32,7 @@ const PartyInvoiceSearch = () => {
       }
 
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/bills/party-invoices/${encodeURIComponent(partyName)}`,
+        `${process.env.REACT_APP_API_URL}/api/bills/party-invoices/${encodeURIComponent(searchTerm)}`,
         {
           method: 'GET',
           headers: {
@@ -64,8 +64,7 @@ const PartyInvoiceSearch = () => {
           <h2 className="text-3xl font-bold text-indigo-600 mb-2">Search Customer Invoices</h2>
           <div className="h-1 w-20 bg-indigo-500 mx-auto rounded-full"></div>
           <p className="mt-4 text-gray-600">
-            Enter the customer's name to view their purchase history and invoices.
-            This is the same name you used when creating sale bills or return bills.
+            Enter the customer's name, invoice number, or receipt number to view the specific invoice or purchase history.
           </p>
         </div>
 
@@ -73,14 +72,14 @@ const PartyInvoiceSearch = () => {
           <div className="flex gap-4">
             <input
               type="text"
-              value={partyName}
-              onChange={(e) => setPartyName(e.target.value)}
-              placeholder="Enter customer name"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Enter customer name, invoice no, or receipt no"
               className="flex-1 rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 p-3 transition-colors"
             />
             <button
               onClick={searchInvoices}
-              disabled={loading || !partyName.trim()}
+              disabled={loading || !searchTerm.trim()}
               className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:bg-gray-400"
             >
               {loading ? 'Searching...' : 'Search'}
@@ -129,7 +128,7 @@ const PartyInvoiceSearch = () => {
 
         {!loading && invoices.length === 0 && !error && (
           <div className="text-center text-gray-500">
-            No invoices found for this customer. Make sure you're using the exact name as entered in the sale bill.
+            No invoices found for this search term. Make sure you entered the exact name, invoice number, or receipt number.
           </div>
         )}
       </div>

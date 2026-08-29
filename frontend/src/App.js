@@ -31,6 +31,7 @@ import ExpiryBillDocs from './components/ExpiryBillDocs';
 import ActivityLogs from './components/ActivityLogs';
 import ChatbotWidget from './components/ChatbotWidget';
 import DemandForecasting from './components/DemandForecasting';
+import SupportTicketForm from './components/SupportTicketForm';
 
 // Pages that should NOT have sidebar (public pages)
 const publicPaths = ['/', '/login', '/register'];
@@ -75,6 +76,7 @@ const AppContent = () => {
         <Route path="/docs/expiry-bill" element={<ExpiryBillDocs />} />
         <Route path="/activity-logs" element={<ActivityLogs />} />
         <Route path="/forecasting" element={<DemandForecasting />} />
+        <Route path="/support" element={<SupportTicketForm />} />
       </Routes>
     </Sidebar>
     <ChatbotWidget />

@@ -1,5 +1,6 @@
 import express from 'express';
 import { isAuthenticated } from '../middleware/authMiddleware.js';
+import { withIdempotency } from '../middleware/idempotencyMiddleware.js';
 import { 
   createPurchaseBill,
   createSaleBill,
@@ -23,9 +24,9 @@ import Inventory from '../models/Inventory.js';
 const router = express.Router();
 
 // Bill Management Routes
-router.post('/purchase', isAuthenticated, createPurchaseBill);
-router.post('/sale', isAuthenticated, createSaleBill);
-router.post('/return', isAuthenticated, createReturnBill);
+router.post('/purchase', isAuthenticated, withIdempotency, createPurchaseBill);
+router.post('/sale', isAuthenticated, withIdempotency, createSaleBill);
+router.post('/return', isAuthenticated, withIdempotency, createReturnBill);
 
 // Get bill details
 router.get('/sale-bill/:billId', isAuthenticated, getSaleBillDetails);
@@ -40,17 +41,40 @@ router.get('/clients', isAuthenticated, getClientsList);
 // Inventory Sub-routes
 router.use('/inventory', inventoryRoutes);
 
-// Get returnable quantities for medicines by party
+// Get returnable quantities for medicines by party or invoice
 router.get('/returnable-quantities', isAuthenticated, async (req, res) => {
   try {
-    const { email, partyName } = req.query;
-    console.log('Query params:', { email, partyName });
+    const { email, partyName, invoiceNumber } = req.query;
+    console.log('Query params:', { email, partyName, invoiceNumber });
 
-    if (!email || !partyName) {
-      return res.status(400).json({ message: 'Email and party name are required' });
+    if (!email || (!partyName && !invoiceNumber)) {
+      return res.status(400).json({ message: 'Email and either party name or invoice number are required' });
     }
 
-    const cleanPartyName = partyName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+    let actualPartyName = partyName;
+    let billItems = null;
+
+    if (invoiceNumber) {
+      const cleanInvoiceNumber = invoiceNumber.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const invoiceRegex = new RegExp(`^\\s*${cleanInvoiceNumber}\\s*$`, 'i');
+      
+      const bill = await SaleBill.findOne({
+        email,
+        $or: [
+          { saleInvoiceNumber: invoiceRegex },
+          { receiptNumber: invoiceRegex }
+        ]
+      });
+
+      if (!bill) {
+        return res.status(404).json({ message: 'Sale bill not found for the given invoice/receipt number' });
+      }
+
+      actualPartyName = bill.partyName || bill.customerName;
+      billItems = bill.items;
+    }
+
+    const cleanPartyName = actualPartyName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
     const partyRegex = new RegExp(`^\\s*${cleanPartyName}\\s*$`, 'i');
 
     // Get all sale bills for the party (case-insensitive exact match)
@@ -153,10 +177,51 @@ router.get('/returnable-quantities', isAuthenticated, async (req, res) => {
       return a.itemName.toLowerCase().localeCompare(b.itemName.toLowerCase());
     });
 
-    res.json(returnableQuantities);
+    let finalReturnableQuantities = returnableQuantities;
+    if (billItems) {
+      const billItemKeys = new Set(billItems.map(item => `${item.itemName.toLowerCase()}-${item.batch}`));
+      finalReturnableQuantities = returnableQuantities.filter(item => 
+        billItemKeys.has(`${item.itemName.toLowerCase()}-${item.batch}`)
+      );
+    }
+
+    res.json({
+      partyName: actualPartyName,
+      items: finalReturnableQuantities
+    });
   } catch (error) {
     console.error('Error getting returnable quantities:', error);
     res.status(500).json({ message: 'Error getting returnable quantities', error: error.message });
+  }
+});
+
+// Get invoices for a specific party/customer/invoice
+router.get('/party-invoices/:searchTerm', isAuthenticated, async (req, res) => {
+  try {
+    const email = req.user?.email || req.query.email;
+    const { searchTerm } = req.params;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const cleanSearchTerm = searchTerm.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+    const searchRegex = new RegExp(`^\\s*${cleanSearchTerm}\\s*$`, 'i');
+
+    const invoices = await SaleBill.find({
+      email,
+      $or: [
+        { partyName: searchRegex },
+        { saleInvoiceNumber: searchRegex },
+        { receiptNumber: searchRegex },
+        { customerName: searchRegex } // Just in case customerName is used instead of partyName
+      ]
+    }).sort({ date: -1 });
+
+    res.json({ invoices });
+  } catch (error) {
+    console.error('Error fetching party invoices:', error);
+    res.status(500).json({ message: 'Error fetching invoices', error: error.message });
   }
 });
 

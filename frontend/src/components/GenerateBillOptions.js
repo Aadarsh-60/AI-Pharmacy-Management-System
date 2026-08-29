@@ -107,7 +107,7 @@ function GenerateBillOptions() {
           </p>
           <div className="flex justify-center space-x-4">
             <button 
-              onClick={() => toast.error('Support module coming soon!')}
+              onClick={() => navigate('/support?source=Generate+Bill')}
               className="px-6 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all"
             >
               Contact Support

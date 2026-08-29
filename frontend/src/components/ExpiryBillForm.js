@@ -156,7 +156,7 @@ const ExpiryBillForm = () => {
             <div className="flex justify-center space-x-4">
               <button 
                 className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition-colors"
-                onClick={() => toast.error('Support module coming soon!')}
+                onClick={() => navigate('/support?source=Expiry+Bill')}
               >
                 Contact Support
               </button>

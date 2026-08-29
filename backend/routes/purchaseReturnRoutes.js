@@ -4,6 +4,7 @@ import {
     createPurchaseReturnBill,
     getPurchaseReturnBills
 } from '../controllers/purchaseReturnController.js';
+import { withIdempotency } from '../middleware/idempotencyMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,7 +14,7 @@ const router = express.Router();
 router.get('/returnable-quantities', getReturnableQuantities);
 
 // Create a purchase return bill
-router.post('/create', createPurchaseReturnBill);
+router.post('/create', withIdempotency, createPurchaseReturnBill);
 
 // Get all purchase return bills
 router.get('/bills', getPurchaseReturnBills);

@@ -246,6 +246,7 @@ const PurchaseBillForm = () => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`,
+          "Idempotency-Key": `purchase-${billDetails.supplierInvoiceNumber || Date.now()}`
         },
         body: JSON.stringify(body),
       });

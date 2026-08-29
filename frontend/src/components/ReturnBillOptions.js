@@ -58,7 +58,7 @@ const ReturnBillOptions = () => {
           </p>
           <div className="flex justify-center gap-4 flex-wrap">
             <button 
-              onClick={() => toast.error('Support module coming soon!')}
+              onClick={() => navigate('/support?source=Return+Bill')}
               className="px-6 py-3 bg-gradient-to-r from-blue-700 to-purple-700 text-white rounded-full font-semibold hover:opacity-90 transition"
             >
               Contact Support
