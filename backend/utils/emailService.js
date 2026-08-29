@@ -8,7 +8,7 @@ dotenv.config({ path: './config/.env' });
 // Configure the email transport using Brevo (smtp-relay.brevo.com)
 const transporter = nodemailer.createTransport({
     host: 'smtp-relay.brevo.com',
-    port: 587,
+    port: 465,
     secure: false, // TLS - use STARTTLS
     auth: {
         user: process.env.BREVO_SMTP_USER,  // Brevo account email
