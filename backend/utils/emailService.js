@@ -1,33 +1,38 @@
-
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
 // Load environment variables from .env file
 dotenv.config({ path: './config/.env' });
 
-// Configure the email transport using Brevo (smtp-relay.brevo.com)
-const transporter = nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 465,
-    secure: true, // TLS - use STARTTLS
-    auth: {
-        user: process.env.BREVO_SMTP_USER,  // Brevo account email
-        pass: process.env.BREVO_SMTP_KEY    // Brevo SMTP Key
-    }
-});
-
-// Utility function to send emails
+// Utility function to send emails using Brevo's REST API (Bypasses SMTP port blocking)
 export const sendEmail = async ({ to, subject, html }) => {
-    const mailOptions = {
-        from: `"Pharmacy Management System" <${process.env.BREVO_FROM_EMAIL}>`, // Sender address
-        to,                          // Recipient address
-        subject,                     // Subject line
-        html,                        // HTML body content
+    const payload = {
+        sender: {
+            name: "Pharmacy Management System",
+            email: process.env.BREVO_FROM_EMAIL
+        },
+        to: [{ email: to }],
+        subject: subject,
+        htmlContent: html
     };
 
     try {
-        await transporter.sendMail(mailOptions);
-        console.log(`Email sent to ${to}`);
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_SMTP_KEY, // Uses your existing Brevo Key
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Brevo API Error Response:', errorData);
+            throw new Error(`API returned ${response.status}: ${JSON.stringify(errorData)}`);
+        }
+
+        console.log(`Email sent successfully to ${to} via API`);
     } catch (error) {
         console.error(`Error sending email to ${to}:`, error);
         throw new Error('Email sending failed');
@@ -36,49 +41,48 @@ export const sendEmail = async ({ to, subject, html }) => {
 
 // Updated function to send 6-digit verification code email
 export const sendVerificationCodeEmail = async (email, verificationCode) => {
-    const mailOptions = {
-        from: `"Pharmacy Management System" <${process.env.BREVO_FROM_EMAIL}>`,
-        to: email,
-        subject: 'Email Verification - Pharmacy Management System',
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                    <h1 style="color: white; margin: 0; font-size: 28px;">Email Verification</h1>
-                    <p style="color: #f0f0f0; margin: 10px 0 0 0;">Pharmacy Management System</p>
+    const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">Email Verification</h1>
+                <p style="color: #f0f0f0; margin: 10px 0 0 0;">Pharmacy Management System</p>
+            </div>
+            
+            <div style="background: #ffffff; padding: 40px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                <h2 style="color: #333; text-align: center; margin-bottom: 30px;">Verify Your Email Address</h2>
+                
+                <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+                    Thank you for registering with our Pharmacy Management System. To complete your registration, please use the verification code below:
+                </p>
+                
+                <div style="background: #f8f9fa; border: 2px dashed #667eea; padding: 20px; text-align: center; margin: 30px 0; border-radius: 8px;">
+                    <p style="color: #333; font-size: 14px; margin: 0 0 10px 0;">Your Verification Code:</p>
+                    <h1 style="color: #667eea; font-size: 36px; font-weight: bold; margin: 0; letter-spacing: 8px; font-family: 'Courier New', monospace;">
+                        ${verificationCode}
+                    </h1>
                 </div>
                 
-                <div style="background: #ffffff; padding: 40px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                    <h2 style="color: #333; text-align: center; margin-bottom: 30px;">Verify Your Email Address</h2>
-                    
-                    <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
-                        Thank you for registering with our Pharmacy Management System. To complete your registration, please use the verification code below:
+                <p style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+                    • This code will expire in <strong>10 minutes</strong><br>
+                    • Enter this code in the verification form to activate your account<br>
+                    • If you didn't request this, please ignore this email
+                </p>
+                
+                <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
+                    <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
+                        This is an automated email, please do not reply to this message.
                     </p>
-                    
-                    <div style="background: #f8f9fa; border: 2px dashed #667eea; padding: 20px; text-align: center; margin: 30px 0; border-radius: 8px;">
-                        <p style="color: #333; font-size: 14px; margin: 0 0 10px 0;">Your Verification Code:</p>
-                        <h1 style="color: #667eea; font-size: 36px; font-weight: bold; margin: 0; letter-spacing: 8px; font-family: 'Courier New', monospace;">
-                            ${verificationCode}
-                        </h1>
-                    </div>
-                    
-                    <p style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
-                        • This code will expire in <strong>10 minutes</strong><br>
-                        • Enter this code in the verification form to activate your account<br>
-                        • If you didn't request this, please ignore this email
-                    </p>
-                    
-                    <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
-                        <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
-                            This is an automated email, please do not reply to this message.
-                        </p>
-                    </div>
                 </div>
             </div>
-        `
-    };
+        </div>
+    `;
 
     try {
-        await transporter.sendMail(mailOptions);
+        await sendEmail({
+            to: email,
+            subject: 'Email Verification - Pharmacy Management System',
+            html: htmlContent
+        });
         console.log(`Verification code email sent to ${email}`);
     } catch (error) {
         console.error(`Error sending verification code email to ${email}:`, error);
@@ -115,10 +119,9 @@ export const sendVerificationEmail = async (email, token) => {
 export const sendExpiryNotificationEmail = async (recipientEmail, expiringItems) => {
     if (!Array.isArray(expiringItems) || expiringItems.length === 0) {
         console.log('No expiring items to send.');
-        return; // If there are no items to send, exit early
+        return;
     }
 
-    // Construct the email content for expiring items
     const itemsList = expiringItems.map(item => {
         return `
             Item Name: ${item.itemName}<br/>
@@ -133,15 +136,12 @@ export const sendExpiryNotificationEmail = async (recipientEmail, expiringItems)
         `;
     }).join('');
 
-    const mailOptions = {
-        from: `"Pharmacy Management System" <${process.env.BREVO_FROM_EMAIL}>`,
-        to: recipientEmail,
-        subject: 'Expiring Items Notification',
-        html: `The following items are expiring soon:<br/><br/>${itemsList}`
-    };
-
     try {
-        await transporter.sendMail(mailOptions);
+        await sendEmail({
+            to: recipientEmail,
+            subject: 'Expiring Items Notification',
+            html: `The following items are expiring soon:<br/><br/>${itemsList}`
+        });
         console.log(`Expiring items email sent successfully to ${recipientEmail}`);
     } catch (error) {
         console.error(`Error sending expiring items email to ${recipientEmail}:`, error);
