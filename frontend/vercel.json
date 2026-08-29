@@ -4,11 +4,16 @@
     {
       "src": "package.json",
       "use": "@vercel/static-build",
-      "config": { "distDir": "build" }
+      "config": {
+        "distDir": "build"
+      }
     }
   ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
@@ -30,6 +35,11 @@
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://medicine-inventory-management-backend.onrender.com"
+    "REACT_APP_API_URL": "https://pharmacy-backend-67lt.onrender.com"
+  },
+  "build": {
+    "env": {
+      "REACT_APP_API_URL": "https://pharmacy-backend-67lt.onrender.com"
+    }
   }
 }
