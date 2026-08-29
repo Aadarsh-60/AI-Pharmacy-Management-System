@@ -19,6 +19,13 @@ const Register = () => {
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const otpInputs = React.useRef([]);
+
+  React.useEffect(() => {
+    if (verificationStep && otpInputs.current[0]) {
+      otpInputs.current[0].focus();
+    }
+  }, [verificationStep]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -137,44 +144,34 @@ const Register = () => {
     </div>
   );
 
-  const EmailVerification = () => {
-    const otpInputs = React.useRef([]);
+  const handleOtpChange = (e, idx) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (!val) { const n = [...otp]; n[idx] = ''; setOtp(n); return; }
+    const n = [...otp]; n[idx] = val.slice(-1); setOtp(n);
+    if (idx < 5) otpInputs.current[idx + 1]?.focus();
+  };
 
-    React.useEffect(() => {
-      // Auto-focus the first input when the component mounts
-      if (otpInputs.current[0]) {
-        otpInputs.current[0].focus();
-      }
-    }, []);
-
-    const handleOtpChange = (e, idx) => {
-      const val = e.target.value.replace(/[^0-9]/g, '');
-      if (!val) { const n = [...otp]; n[idx] = ''; setOtp(n); return; }
-      const n = [...otp]; n[idx] = val[0]; setOtp(n);
-      if (idx < 5) otpInputs.current[idx + 1]?.focus();
-    };
-
-    const handleOtpKeyDown = (e, idx) => {
-      if (e.key === 'Backspace') {
-        e.preventDefault();
-        if (otp[idx]) { const n = [...otp]; n[idx] = ''; setOtp(n); }
-        else if (idx > 0) { const n = [...otp]; n[idx - 1] = ''; setOtp(n); otpInputs.current[idx - 1]?.focus(); }
-      } else if (e.key === 'ArrowLeft' && idx > 0) otpInputs.current[idx - 1]?.focus();
-      else if (e.key === 'ArrowRight' && idx < 5) otpInputs.current[idx + 1]?.focus();
-    };
-
-    const handleOtpPaste = (e) => {
+  const handleOtpKeyDown = (e, idx) => {
+    if (e.key === 'Backspace') {
       e.preventDefault();
-      const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-      if (pasted) {
-        const n = [...otp];
-        for (let i = 0; i < pasted.length && i < 6; i++) n[i] = pasted[i];
-        setOtp(n);
-        otpInputs.current[Math.min(pasted.length, 5)]?.focus();
-      }
-    };
+      if (otp[idx]) { const n = [...otp]; n[idx] = ''; setOtp(n); }
+      else if (idx > 0) { const n = [...otp]; n[idx - 1] = ''; setOtp(n); otpInputs.current[idx - 1]?.focus(); }
+    } else if (e.key === 'ArrowLeft' && idx > 0) otpInputs.current[idx - 1]?.focus();
+    else if (e.key === 'ArrowRight' && idx < 5) otpInputs.current[idx + 1]?.focus();
+  };
 
-    return (
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+    if (pasted) {
+      const n = [...otp];
+      for (let i = 0; i < pasted.length && i < 6; i++) n[i] = pasted[i];
+      setOtp(n);
+      otpInputs.current[Math.min(pasted.length, 5)]?.focus();
+    }
+  };
+
+  const renderEmailVerification = () => (
       <>
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -239,7 +236,6 @@ const Register = () => {
         </form>
       </>
     );
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-12 px-4" style={{ background: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)' }}>
@@ -267,7 +263,7 @@ const Register = () => {
         <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl border border-white/20 p-8" style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1), inset 0 1px 0 rgba(255,255,255,0.2)' }}>
           
           {verificationStep ? (
-            <EmailVerification />
+            renderEmailVerification()
           ) : (
             <>
               <div className="text-center mb-8">
