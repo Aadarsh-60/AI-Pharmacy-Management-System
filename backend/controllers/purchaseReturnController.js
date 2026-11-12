@@ -294,11 +294,19 @@ export const createPurchaseReturnBill = async (req, res) => {
                 });
             }
 
+            const escapeRegex = (str) => (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const trimmedItemName = (item.itemName || '').trim();
+            const trimmedBatch = (item.batch || '').trim();
+            const alphanumericBatch = trimmedBatch.replace(/[^a-zA-Z0-9]/g, '');
+            const batchRegex = alphanumericBatch.length > 0
+                ? new RegExp(`^(${escapeRegex(trimmedBatch)}|${alphanumericBatch.split('').join('[-_\\s/]?')})$`, 'i')
+                : new RegExp(`^${escapeRegex(trimmedBatch)}$`, 'i');
+
             // Verify item exists in inventory with sufficient quantity
             const inventoryItem = await Inventory.findOne({
                 email,
-                itemName: { $regex: new RegExp(`^${item.itemName}$`, 'i') },
-                batch: { $regex: new RegExp(`^${item.batch}$`, 'i') }
+                itemName: { $regex: new RegExp(`^${escapeRegex(trimmedItemName)}$`, 'i') },
+                batch: { $regex: batchRegex }
             });
 
             if (!inventoryItem) {
@@ -312,6 +320,11 @@ export const createPurchaseReturnBill = async (req, res) => {
                     message: `Insufficient quantity in inventory for ${item.itemName} (Batch: ${item.batch}). Available: ${inventoryItem.quantity}, Requested: ${item.quantity}`
                 });
             }
+
+            // Attach canonical identifiers and inventory ID
+            item._inventoryId = inventoryItem._id;
+            item.itemName = inventoryItem.itemName;
+            item.batch = inventoryItem.batch;
         }
 
         // Calculate totals for each item
@@ -378,9 +391,8 @@ export const createPurchaseReturnBill = async (req, res) => {
 
                 const result = await Inventory.findOneAndUpdate(
                     { 
-                        itemName: item.itemName, 
-                        batch: item.batch,
-                        email
+                        _id: item._inventoryId,
+                        quantity: { $gte: item.quantity }
                     },
                     { $inc: { quantity: -item.quantity } },
                     { 
@@ -548,7 +560,8 @@ const getReturnableQuantitiesForSupplier = async (email, supplierName) => {
 // Get all purchase return bills for a supplier
 export const getPurchaseReturnBills = async (req, res) => {
     try {
-        const { email, supplierName } = req.query;
+        const { supplierName } = req.query;
+        const email = req.query.email || req.user?.email;
 
         if (!email) {
             return res.status(400).json({ message: 'Email is required' });

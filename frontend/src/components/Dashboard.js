@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 // Create axios instance with proper configuration
 const axiosInstance = axios.create({
-  baseURL: `${process.env.REACT_APP_API_URL}`,
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -28,6 +28,11 @@ axiosInstance.interceptors.request.use(
   }
 );
 
+const CATEGORY_COLORS = [
+  '#6366f1', '#0ea5e9', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6',
+  '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#a855f7', '#64748b'
+];
+
 function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,6 +45,7 @@ function Dashboard() {
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
   const [categoryDistribution, setCategoryDistribution] = useState([]);
+  const [categoryViewMode, setCategoryViewMode] = useState('chart'); // 'chart' | 'list'
   const [purchaseSuggestions, setPurchaseSuggestions] = useState([]);
   const [analyticsData, setAnalyticsData] = useState({
     totalRevenue: 0,
@@ -114,7 +120,11 @@ function Dashboard() {
 
     setLowStockCount(lowStockItems.length);
     setExpiringSoonCount(expiringSoonItems.length);
-    setCategoryDistribution(Object.entries(categories).map(([name, value]) => ({ name, value })));
+    setCategoryDistribution(
+      Object.entries(categories)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+    );
 
     const lowStockNotifications = lowStockItems.map(item => ({
       type: "warning",
@@ -286,16 +296,21 @@ function Dashboard() {
         const averageOrderValue = uniqueInvoices.length > 0 ? totalRevenue / uniqueInvoices.length : 0;
 
         const medicineMap = sales.reduce((acc, sale) => {
-          const key = sale.itemName;
+          const key = (sale.itemName || sale.name || '').trim();
+          if (!key || key.toLowerCase() === 'undefined') return acc;
           if (!acc[key]) acc[key] = 0;
-          acc[key] += sale.quantity;
+          acc[key] += Number(sale.quantity) || 0;
           return acc;
         }, {});
 
         const topSellingMedicines = Object.entries(medicineMap)
           .sort(([, a], [, b]) => b - a)
           .slice(0, 5)
-          .map(([name, quantity]) => ({ name, quantity }));
+          .map(([name, quantity]) => ({
+            name,
+            shortName: name.length > 14 ? name.slice(0, 12) + '…' : name,
+            quantity
+          }));
 
         // Fetch Top Parties
         let topCustomers = [];
@@ -484,32 +499,28 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-indigo-50 p-6 relative overflow-hidden">
-      {/* Background elements */}
-      <div className="absolute -top-32 -right-32 w-64 h-64 bg-teal-200 rounded-full opacity-20 mix-blend-multiply filter blur-xl animate-blob"></div>
-      <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-indigo-200 rounded-full opacity-20 mix-blend-multiply filter blur-xl animate-blob animation-delay-2000"></div>
-
+    <div className="min-h-screen bg-slate-50 p-6 relative">
       <div className="relative z-10 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8 p-4 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white">
+        <div className="flex items-center justify-between mb-8 p-5 bg-white rounded-2xl shadow-sm border border-slate-200/90">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back, {userName || email || "Guest"}!
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Welcome back, {userName || email || "Store Manager"}!
             </h1>
-            <p className="text-gray-600">Pharmacy Management Dashboard</p>
+            <p className="text-slate-500 text-sm mt-0.5">Medical Store Overview & Inventory Control</p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             {socket?.connected && (
-              <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span>Live</span>
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-1 rounded-full text-xs font-semibold flex items-center space-x-1.5 shadow-sm">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span>Live Stock Sync</span>
               </span>
             )}
             <span
               onClick={handleAlertClick}
-              className="bg-teal-100 text-teal-800 px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-teal-200 transition-colors"
+              className="bg-teal-50 text-teal-800 border border-teal-200 px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer hover:bg-teal-100 transition-colors shadow-sm"
             >
-              {notifications.length} Alerts
+              🔔 {notifications.length} Alerts
             </span>
           </div>
         </div>
@@ -517,14 +528,17 @@ function Dashboard() {
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
           {/* Inventory Health Card */}
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="p-3 bg-teal-100 rounded-xl">
-                <span className="text-3xl text-teal-600">💊</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="p-2.5 bg-teal-50 text-teal-600 rounded-xl border border-teal-100">
+                <span className="text-2xl">💊</span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Inventory Health</h2>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Inventory Health</h2>
+                <p className="text-xs text-slate-500">Stock on shelf & alerts</p>
+              </div>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <MetricItem
                 label="Total Medicines"
                 value={inventoryCount}
@@ -533,14 +547,14 @@ function Dashboard() {
                 onClick={() => navigate("/inventory")}
               />
               <MetricItem
-                label="Low Stock"
+                label="Low Stock Items"
                 value={lowStockCount}
                 icon="⚠️"
                 color="amber"
                 onClick={handleAlertClick}
               />
               <MetricItem
-                label="Expiring Soon"
+                label="Expiring Soon (30d)"
                 value={expiringSoonCount}
                 icon="⌛"
                 color="rose"
@@ -550,85 +564,91 @@ function Dashboard() {
           </div>
 
           {/* Purchase Suggestions Card */}
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="p-3 bg-orange-100 rounded-xl">
-                <span className="text-3xl text-orange-600">💡</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
+                <span className="text-2xl">📋</span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Purchase Suggestions</h2>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Reorder Suggestions</h2>
+                <p className="text-xs text-slate-500">Low stock medicines</p>
+              </div>
             </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {purchaseSuggestions.length > 0 ? (
                 purchaseSuggestions.slice(0, 5).map((suggestion, index) => (
                   <div
                     key={index}
                     onClick={() => handlePurchaseSuggestionClick(suggestion)}
-                    className="p-3 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg cursor-pointer hover:shadow-md transition-all border border-orange-100"
+                    className="p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-teal-50/50 hover:border-teal-300 transition-all border border-slate-200"
                   >
                     <div className="flex justify-between items-start mb-1">
-                      <h4 className="font-semibold text-gray-800 text-sm">{suggestion.itemName}</h4>
-                      <span className={`px-2 py-1 rounded-full text-xs ${suggestion.priority === 'high' ? 'bg-red-100 text-red-700' :
-                          suggestion.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
+                      <h4 className="font-semibold text-slate-800 text-sm truncate mr-2">{suggestion.itemName}</h4>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${suggestion.priority === 'high' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                          suggestion.priority === 'medium' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                            'bg-emerald-100 text-emerald-700 border border-emerald-200'
                         }`}>
                         {suggestion.priority}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-600 mb-1">{suggestion.reason}</p>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Qty: {suggestion.suggestedQuantity}</span>
-                      <span>₹{suggestion.estimatedCost?.toFixed(2) || '0.00'}</span>
+                    <p className="text-xs text-slate-600 mb-1">{suggestion.reason}</p>
+                    <div className="flex justify-between text-xs font-medium text-slate-500">
+                      <span>Suggested: {suggestion.suggestedQuantity} units</span>
+                      <span className="text-slate-800 font-bold">₹{suggestion.estimatedCost?.toFixed(2) || '0.00'}</span>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <span className="text-2xl mb-2 block">✨</span>
-                  <p className="text-sm">No urgent purchase suggestions</p>
+                <div className="text-center py-8 text-slate-400">
+                  <span className="text-2xl mb-1 block">✅</span>
+                  <p className="text-xs font-medium">All medicines have healthy stock</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Smart Bill Advisor */}
-          <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="p-3 bg-indigo-100 rounded-xl">
-                <span className="text-3xl text-indigo-600">📈</span>
+          {/* Daily Shop & Counter Overview */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                <span className="text-2xl">📊</span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Smart Bill Advisor</h2>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Counter Sales Overview</h2>
+                <p className="text-xs text-slate-500">Today's billing & medicine trends</p>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-800 mb-4">Quick Stats</h3>
-                <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-700 text-xs uppercase tracking-wider">Store Sales</h3>
+                <div className="grid grid-cols-1 gap-3">
                   <ActivityItem
-                    title="Today's Sales"
+                    title="Today's Total Sales"
                     amount={activityMetrics.dailySales}
                     icon="💰"
                     color="green"
                   />
                   <ActivityItem
-                    title="Monthly Revenue"
+                    title="This Month's Sales"
                     amount={activityMetrics.monthlySales}
                     icon="📆"
                     color="indigo"
                   />
                 </div>
               </div>
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-800 mb-4">Top Selling Medicines</h3>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-700 text-xs uppercase tracking-wider">Top Fast-Moving Medicines</h3>
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                   {analyticsData.topSellingMedicines.length > 0 ? (
                     analyticsData.topSellingMedicines.map((medicine, index) => (
-                      <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
-                        <span className="text-sm font-medium text-gray-700">{medicine.name}</span>
-                        <span className="text-sm text-indigo-600 font-semibold">{medicine.quantity} units</span>
+                      <div key={index} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                        <span className="font-semibold text-slate-800 truncate mr-2">{medicine.name}</span>
+                        <span className="text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 flex-shrink-0">{medicine.quantity} units</span>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-4 text-gray-500">
-                      <p className="text-sm">No sales data available</p>
+                    <div className="text-center py-6 text-slate-400">
+                      <p className="text-xs">No sales recorded yet</p>
                     </div>
                   )}
                 </div>
@@ -639,60 +659,66 @@ function Dashboard() {
 
         {/* Top Customers & Suppliers */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90">
             <div className="flex items-center space-x-3 mb-6">
-              <span className="text-2xl text-blue-600">👥</span>
-              <h2 className="text-xl font-bold text-gray-900">Frequent Customers</h2>
+              <span className="text-2xl text-teal-600">👥</span>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Frequent Customers</h2>
+                <p className="text-xs text-slate-500">Regular patients & counter visitors</p>
+              </div>
             </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {analyticsData.topCustomers && analyticsData.topCustomers.length > 0 ? (
                 analyticsData.topCustomers.map((customer, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
+                  <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-teal-300 transition-colors">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-200 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg">
+                      <div className="w-10 h-10 bg-teal-100 text-teal-800 rounded-full flex items-center justify-center font-bold text-base shadow-sm">
                         {customer.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-800">{customer.name}</h4>
-                        <p className="text-xs text-gray-500">{customer.billsCount} Bills</p>
+                        <h4 className="font-semibold text-slate-900 text-sm">{customer.name}</h4>
+                        <p className="text-xs text-slate-500">{customer.billsCount} Bills</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-blue-700">₹{customer.totalAmount.toFixed(2)}</p>
+                      <p className="font-bold text-teal-700 text-sm">₹{customer.totalAmount.toFixed(2)}</p>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-4 text-gray-500">No customers found</div>
+                <div className="text-center py-6 text-slate-400 text-xs">No customer sales recorded yet</div>
               )}
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90">
             <div className="flex items-center space-x-3 mb-6">
-              <span className="text-2xl text-purple-600">🏢</span>
-              <h2 className="text-xl font-bold text-gray-900">Top Suppliers</h2>
+              <span className="text-2xl text-blue-600">🏭</span>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Top Medicine Suppliers</h2>
+                <p className="text-xs text-slate-500">Wholesale distributors & inward stock</p>
+              </div>
             </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {analyticsData.topSuppliers && analyticsData.topSuppliers.length > 0 ? (
                 analyticsData.topSuppliers.map((supplier, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 shadow-sm hover:shadow-md transition-shadow">
+                  <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-blue-300 transition-colors">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-purple-200 text-purple-700 rounded-full flex items-center justify-center font-bold text-lg">
+                      <div className="w-10 h-10 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center font-bold text-base shadow-sm">
                         {supplier.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-800">{supplier.name}</h4>
-                        <p className="text-xs text-gray-500">{supplier.billsCount} Invoices</p>
+                        <h4 className="font-semibold text-slate-900 text-sm">{supplier.name}</h4>
+                        <p className="text-xs text-slate-500">{supplier.billsCount} Invoices</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-purple-700">₹{supplier.totalAmount.toFixed(2)}</p>
+                      <p className="font-bold text-blue-700 text-sm">₹{supplier.totalAmount.toFixed(2)}</p>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-4 text-gray-500">No suppliers found</div>
+                <div className="text-center py-6 text-slate-400 text-xs">No supplier invoices found</div>
               )}
             </div>
           </div>
@@ -701,121 +727,304 @@ function Dashboard() {
         {/* Interactive Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Top Selling Medicines Bar Chart */}
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
-            <div className="flex items-center space-x-3 mb-4">
-              <span className="text-2xl">📊</span>
-              <h3 className="text-lg font-bold text-gray-900">Top Selling Medicines</h3>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <span className="text-2xl">📊</span>
+                  <h3 className="text-lg font-bold text-slate-900">Top Selling Medicines</h3>
+                </div>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                  By Units
+                </span>
+              </div>
+              {analyticsData.topSellingMedicines.length > 0 ? (
+                <ResponsiveContainer width="100%" height={230}>
+                  <BarChart data={analyticsData.topSellingMedicines} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis
+                      dataKey="shortName"
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      angle={-15}
+                      textAnchor="end"
+                      interval={0}
+                    />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                        fontSize: '12px',
+                        fontWeight: '500'
+                      }}
+                      formatter={(val, _name, item) => [`${val} units sold`, item.payload.name || 'Medicine']}
+                    />
+                    <Bar dataKey="quantity" fill="url(#barGradient)" radius={[6, 6, 0, 0]} />
+                    <defs>
+                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0d9488" />
+                        <stop offset="100%" stopColor="#14b8a6" />
+                      </linearGradient>
+                    </defs>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[230px] flex items-center justify-center text-slate-400 text-xs">No sales data yet</div>
+              )}
             </div>
-            {analyticsData.topSellingMedicines.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={analyticsData.topSellingMedicines}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="quantity" fill="url(#barGradient)" radius={[6, 6, 0, 0]} />
-                  <defs>
-                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" />
-                      <stop offset="100%" stopColor="#8b5cf6" />
-                    </linearGradient>
-                  </defs>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[250px] flex items-center justify-center text-gray-400">No sales data yet</div>
-            )}
           </div>
 
           {/* Inventory Distribution Pie Chart */}
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
-            <div className="flex items-center space-x-3 mb-4">
-              <span className="text-2xl">🥧</span>
-              <h3 className="text-lg font-bold text-gray-900">Inventory Status</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Healthy Stock', value: Math.max(0, inventoryCount - lowStockCount - expiringSoonCount) },
-                    { name: 'Low Stock', value: lowStockCount },
-                    { name: 'Expiring Soon', value: expiringSoonCount },
-                  ]}
-                  cx="50%" cy="50%" innerRadius={55} outerRadius={90}
-                  paddingAngle={4} dataKey="value"
-                >
-                  <Cell fill="#10b981" />
-                  <Cell fill="#f59e0b" />
-                  <Cell fill="#ef4444" />
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Category Distribution Pie Chart */}
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white">
-            <div className="flex items-center space-x-3 mb-4">
-              <span className="text-2xl">🏷️</span>
-              <h3 className="text-lg font-bold text-gray-900">Category Distribution</h3>
-            </div>
-            {categoryDistribution.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <span className="text-2xl">🥧</span>
+                  <h3 className="text-lg font-bold text-slate-900">Inventory Status</h3>
+                </div>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {inventoryCount} Items Total
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={230}>
                 <PieChart>
                   <Pie
-                    data={categoryDistribution}
-                    cx="50%" cy="50%" innerRadius={55} outerRadius={90}
+                    data={[
+                      { name: 'Healthy Stock', value: Math.max(0, inventoryCount - lowStockCount - expiringSoonCount) },
+                      { name: 'Low Stock', value: lowStockCount },
+                      { name: 'Expiring Soon', value: expiringSoonCount },
+                    ]}
+                    cx="50%" cy="45%" innerRadius={50} outerRadius={75}
                     paddingAngle={4} dataKey="value"
                   >
-                    {categoryDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#64748b'][index % 6]} />
-                    ))}
+                    <Cell fill="#10b981" />
+                    <Cell fill="#f59e0b" />
+                    <Cell fill="#ef4444" />
                   </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                  <Legend />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '12px',
+                      border: '1px solid #e2e8f0',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                      fontSize: '12px'
+                    }}
+                    formatter={(val, name) => [`${val} items`, name]}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }} />
                 </PieChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-[250px] flex items-center justify-center text-gray-400">No categories found</div>
-            )}
+            </div>
+          </div>
+
+          {/* Category Distribution Card (Enhanced UI) */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-2xl">🏷️</span>
+                  <h3 className="text-lg font-bold text-gray-900">Category Distribution</h3>
+                </div>
+                {/* View toggle tabs */}
+                <div className="flex items-center bg-gray-100 rounded-lg p-0.5 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryViewMode('chart')}
+                    className={`px-2 py-1 rounded-md transition-all ${
+                      categoryViewMode === 'chart'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    Donut
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryViewMode('list')}
+                    className={`px-2 py-1 rounded-md transition-all ${
+                      categoryViewMode === 'list'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    Breakdown
+                  </button>
+                </div>
+              </div>
+
+              {categoryDistribution.length > 0 ? (
+                categoryViewMode === 'chart' ? (
+                  <div>
+                    {/* Donut Chart with clean center label */}
+                    <div className="relative">
+                      <ResponsiveContainer width="100%" height={140}>
+                        <PieChart>
+                          <Pie
+                            data={categoryDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={42}
+                            outerRadius={62}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {categoryDistribution.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              borderRadius: '12px',
+                              border: 'none',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                              fontSize: '12px',
+                              fontWeight: '500'
+                            }}
+                            formatter={(value, name) => [
+                              `${value} medicines (${(
+                                (value /
+                                  (categoryDistribution.reduce((a, b) => a + b.value, 0) || 1)) *
+                                100
+                              ).toFixed(1)}%)`,
+                              name
+                            ]}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total</span>
+                        <span className="text-sm font-bold text-gray-800">
+                          {categoryDistribution.length} Cats
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Scrollable multi-column clean legend list */}
+                    <div className="mt-2 max-h-[85px] overflow-y-auto pr-1 grid grid-cols-2 gap-1.5 custom-scrollbar">
+                      {categoryDistribution.map((cat, idx) => {
+                        const total = categoryDistribution.reduce((a, b) => a + b.value, 0) || 1;
+                        const pct = ((cat.value / total) * 100).toFixed(0);
+                        const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between text-xs px-2 py-1 rounded-lg bg-gray-50/80 hover:bg-gray-100 transition-colors border border-gray-100"
+                            title={`${cat.name}: ${cat.value} medicines (${pct}%)`}
+                          >
+                            <div className="flex items-center space-x-1.5 truncate mr-1">
+                              <span
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="truncate text-[11px] font-medium text-gray-700">
+                                {cat.name}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-gray-400 flex-shrink-0">
+                              {pct}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  /* Ranked Breakdown Progress List */
+                  <div className="h-[235px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                    {categoryDistribution.map((cat, idx) => {
+                      const total = categoryDistribution.reduce((a, b) => a + b.value, 0) || 1;
+                      const pct = ((cat.value / total) * 100).toFixed(1);
+                      const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                      return (
+                        <div
+                          key={idx}
+                          className="p-2 rounded-xl bg-gray-50/90 hover:bg-gray-100 transition-all border border-gray-100"
+                        >
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <div className="flex items-center space-x-2 truncate mr-2">
+                              <span
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="font-semibold text-gray-800 text-[11px] truncate">
+                                {cat.name}
+                              </span>
+                            </div>
+                            <span className="font-bold text-gray-900 text-xs whitespace-nowrap">
+                              {cat.value}{' '}
+                              <span className="font-normal text-[10px] text-gray-400">
+                                ({pct}%)
+                              </span>
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200/80 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                <div className="h-[230px] flex items-center justify-center text-gray-400">
+                  No categories found
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/90 mb-8">
           <div className="flex items-center space-x-3 mb-6">
             <span className="text-2xl">⚡</span>
-            <h2 className="text-xl font-bold text-gray-900">Quick Actions</h2>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Quick Actions</h2>
+              <p className="text-xs text-slate-500">Fast shortcuts to common medical store workflows</p>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <ActionButton
               label="Sales Report"
               icon="💰"
-              description="Daily/Weekly/Monthly sales trends"
+              iconBg="bg-emerald-50"
+              iconColor="text-emerald-700"
+              badgeColor="border-emerald-200"
+              description="Daily, weekly & monthly medicine sales trends"
               onClick={() => navigate("/medicine-sales-summary")}
-              gradient="from-green-400 to-blue-400"
             />
             <ActionButton
-              label="Inventory Report"
-              icon="📦"
-              description="Stock levels & valuation"
+              label="Medicine Stock"
+              icon="💊"
+              iconBg="bg-teal-50"
+              iconColor="text-teal-700"
+              badgeColor="border-teal-200"
+              description="Check stock levels, batch counts & valuations"
               onClick={() => navigate("/view-inventory")}
-              gradient="from-teal-400 to-cyan-400"
             />
             <ActionButton
               label="Purchase History"
-              icon="🕰️"
-              description="Detailed purchase records"
+              icon="📦"
+              iconBg="bg-blue-50"
+              iconColor="text-blue-700"
+              badgeColor="border-blue-200"
+              description="Review supplier bills and distributor inwards"
               onClick={() => navigate("/purchase-history")}
-              gradient="from-purple-500 to-pink-500"
             />
             <ActionButton
-              label="Generate Bill"
+              label="Customer Billing"
               icon="🧾"
-              description="Create new purchase/sell/return bills"
+              iconBg="bg-indigo-50"
+              iconColor="text-indigo-700"
+              badgeColor="border-indigo-200"
+              description="Create customer GST bills or record returns"
               onClick={() => navigate("/generate-bill")}
-              gradient="from-blue-400 to-purple-400"
             />
           </div>
         </div>
@@ -827,64 +1036,64 @@ function Dashboard() {
 // Reusable Components
 const MetricItem = ({ label, value, icon, color, onClick }) => {
   const colorClasses = {
-    teal: { bg: "bg-teal-100", text: "text-teal-600" },
-    amber: { bg: "bg-amber-100", text: "text-amber-600" },
-    rose: { bg: "bg-rose-100", text: "text-rose-600" }
+    teal: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-100" },
+    amber: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-100" },
+    rose: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-100" }
   };
 
   return (
     <div
       onClick={onClick}
-      className="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer"
+      className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-teal-50/50 rounded-xl border border-slate-200 hover:border-teal-300 transition-all cursor-pointer shadow-sm"
     >
       <div className="flex items-center space-x-3">
-        <span className={`text-2xl ${colorClasses[color].bg} p-2 rounded-lg ${colorClasses[color].text}`}>
+        <span className={`text-xl ${colorClasses[color].bg} ${colorClasses[color].text} border ${colorClasses[color].border} p-2 rounded-lg`}>
           {icon}
         </span>
-        <span className="text-gray-700">{label}</span>
+        <span className="text-slate-700 text-sm font-semibold">{label}</span>
       </div>
-      <span className={`text-xl font-bold ${colorClasses[color].text}`}>{value || 0}</span>
+      <span className={`text-lg font-bold ${colorClasses[color].text}`}>{value || 0}</span>
     </div>
   );
 };
 
 const ActivityItem = ({ title, amount, icon, color }) => {
   const colorClasses = {
-    green: { bg: "bg-green-50", text: "text-green-600", hover: "hover:bg-green-100" },
-    indigo: { bg: "bg-indigo-50", text: "text-indigo-600", hover: "hover:bg-indigo-100" },
-    purple: { bg: "bg-purple-50", text: "text-purple-600", hover: "hover:bg-purple-100" }
+    green: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+    indigo: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
+    purple: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" }
   };
 
   return (
-    <div className={`p-4 ${colorClasses[color].bg} rounded-xl ${colorClasses[color].hover} transition-colors`}>
+    <div className={`p-4 ${colorClasses[color].bg} rounded-xl border ${colorClasses[color].border} transition-colors`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <span className={`text-2xl ${colorClasses[color].text}`}>{icon}</span>
-          <span className="text-gray-700">{title}</span>
+          <span className={`text-xl ${colorClasses[color].text}`}>{icon}</span>
+          <span className="text-slate-700 text-xs font-semibold">{title}</span>
         </div>
-        <span className={`text-lg font-semibold ${colorClasses[color].text}`}>{amount}</span>
+        <span className={`text-base font-extrabold ${colorClasses[color].text}`}>{amount}</span>
       </div>
     </div>
   );
 };
 
-const ActionButton = ({ label, icon, description, onClick, gradient }) => (
+const ActionButton = ({ label, icon, description, onClick, iconBg, iconColor, badgeColor }) => (
   <button
+    type="button"
     onClick={onClick}
-    className={`group relative flex flex-col items-center p-6 rounded-xl bg-gradient-to-br ${gradient} 
-      hover:shadow-xl transition-all transform hover:scale-[1.02] min-h-[180px] justify-between
-      overflow-hidden`}
+    className="group relative flex flex-col justify-between p-5 rounded-2xl bg-white border border-slate-200/90 hover:shadow-md hover:border-teal-400 transition-all text-left min-h-[155px]"
   >
-    <div className="absolute inset-0 bg-black/5 transition-all group-hover:bg-black/10"></div>
-    <div className="z-10 w-full">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-4xl text-white drop-shadow-md">{icon}</span>
-        <span className="text-white/80 text-sm">View Report →</span>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className={`w-11 h-11 rounded-xl ${iconBg} ${iconColor} border ${badgeColor} flex items-center justify-center text-xl shadow-sm`}>
+          {icon}
+        </div>
+        <span className="text-xs font-bold text-teal-600 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+          Open →
+        </span>
       </div>
-      <div className="text-left">
-        <h3 className="text-xl font-bold text-white mb-2">{label}</h3>
-        <p className="text-sm text-white/90 leading-tight">{description}</p>
-      </div>
+      <h3 className="text-base font-bold text-slate-900 group-hover:text-teal-700 transition-colors">{label}</h3>
+      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{description}</p>
     </div>
   </button>
 );

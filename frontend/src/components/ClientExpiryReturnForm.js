@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import axiosInstance from '../utils/axios';
 
-const API_BASE_URL = `${process.env.REACT_APP_API_URL}`;
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // Set up axios auth interceptor
 axiosInstance.interceptors.request.use(

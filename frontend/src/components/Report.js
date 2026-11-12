@@ -340,7 +340,8 @@ function MedicineSalesSummary() {
             'Content-Type': 'application/json'
           }
         });
-        const medicines = response.data.map(item => item.itemName);
+        const rawMeds = Array.isArray(response.data) ? response.data : (response.data?.inventory || response.data?.items || []);
+        const medicines = rawMeds.map(item => item.itemName).filter(Boolean);
         setAvailableMedicines([...new Set(medicines)]);
       } catch (err) {
         console.error('Error fetching available medicines:', err);

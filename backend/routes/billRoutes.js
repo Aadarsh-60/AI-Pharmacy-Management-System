@@ -31,7 +31,7 @@ router.post('/return', isAuthenticated, withIdempotency, createReturnBill);
 // Get bill details
 router.get('/sale-bill/:billId', isAuthenticated, getSaleBillDetails);
 router.get('/batch-details', isAuthenticated, getBatchDetails);
-router.get('/purchase-history', isAuthenticated, getPurchaseHistory);
+router.get('/purchase-history', isAuthenticated, getPurchaseBillHistory);
 router.post('/next-invoice-number', isAuthenticated, getNextInvoiceNumber);
 router.get('/medicine-sales', isAuthenticated, getMedicineSalesDetails);
 router.get('/top-parties', isAuthenticated, getTopParties);

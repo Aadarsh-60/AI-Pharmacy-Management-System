@@ -164,7 +164,7 @@ import express from 'express';
 import Inventory from '../models/Inventory.js';
 import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
-import { isAuthenticated } from '../middleware/authMiddleware.js'; // Assuming you use authentication
+import { isAuthenticated, authorizeRoles } from '../middleware/authMiddleware.js'; // Assuming you use authentication
 import {
     addOrUpdateInventoryItem, // The main endpoint function
     getInventory,
@@ -278,44 +278,137 @@ router.get('/customer/:customerName', readLimiter, isAuthenticated, getCustomerP
 router.get('/available', readLimiter, isAuthenticated, async (req, res) => {
   try {
     const { email, itemName, batch } = req.query;
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required to fetch inventory' });
+    const userEmail = (email || req.user?.email || '').trim();
+    const escapeRegex = (str) => (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Clean up expired locks first so they do not artificially depress available quantity
+    try {
+      await InventoryLock.deleteMany({ expiresAt: { $lte: new Date() } });
+    } catch (lockCleanupErr) {
+      console.warn('Inventory lock cleanup warning:', lockCleanupErr.message);
     }
-    // Build the query
-    const query = { email };
-    if (itemName) query.itemName = { $regex: itemName, $options: 'i' };
-    if (batch) query.batch = batch;
-    // Fetch inventory items
-    const inventoryItems = await Inventory.find(query);
+
+    // Prepare batch regex if provided
+    let batchRegex = null;
+    if (batch) {
+      const trimmedBatch = batch.trim();
+      const alphanumericBatch = trimmedBatch.replace(/[^a-zA-Z0-9]/g, '');
+      batchRegex = alphanumericBatch.length > 0
+        ? new RegExp(`^(${escapeRegex(trimmedBatch)}|${alphanumericBatch.split('').join('[-_\\s/]?')})$`, 'i')
+        : new RegExp(`^${escapeRegex(trimmedBatch)}$`, 'i');
+    }
+
+    // Step 1: Query by user email (case-insensitive) if email is provided
+    let inventoryItems = [];
+    if (userEmail) {
+      const query = { email: { $regex: new RegExp(`^${escapeRegex(userEmail)}$`, 'i') } };
+      if (itemName) query.itemName = { $regex: escapeRegex(itemName.trim()), $options: 'i' };
+      if (batchRegex) query.batch = { $regex: batchRegex };
+      inventoryItems = await Inventory.find(query);
+    }
+
+    // Step 2: Fallback across the store / pharmacy inventory if no items found for this specific user email
+    if (!inventoryItems.length && itemName) {
+      const fallbackQuery = {
+        itemName: { $regex: escapeRegex(itemName.trim()), $options: 'i' }
+      };
+      if (batchRegex) fallbackQuery.batch = { $regex: batchRegex };
+      inventoryItems = await Inventory.find(fallbackQuery);
+    }
+
+    // Step 3: Flexible multi-word matching (e.g. "monocef 500" matching "Monocef-500", "Monocef 500mg", etc.)
+    if (!inventoryItems.length && itemName && itemName.trim().includes(' ')) {
+      const words = itemName.trim().split(/\s+/).map(w => escapeRegex(w)).filter(Boolean);
+      const wordPattern = words.map(w => `(?=.*${w})`).join('');
+      const flexibleRegex = new RegExp(wordPattern, 'i');
+
+      if (userEmail) {
+        inventoryItems = await Inventory.find({
+          email: { $regex: new RegExp(`^${escapeRegex(userEmail)}$`, 'i') },
+          itemName: { $regex: flexibleRegex }
+        });
+      }
+      if (!inventoryItems.length) {
+        inventoryItems = await Inventory.find({
+          itemName: { $regex: flexibleRegex }
+        });
+      }
+    }
+
+    // Step 4: First word prefix fallback (e.g. "monocef" from "monocef 500") if still not found
+    if (!inventoryItems.length && itemName) {
+      const firstWord = itemName.trim().split(/\s+/)[0];
+      if (firstWord && firstWord.length >= 3) {
+        inventoryItems = await Inventory.find({
+          itemName: { $regex: escapeRegex(firstWord), $options: 'i' }
+        });
+      }
+    }
+
     if (!inventoryItems.length) {
-      return res.status(404).json({ message: 'No inventory items found for the given criteria' });
+      return res.status(200).json([]);
     }
-    // For each item, get locked quantity and calculate available
+
+    // For each item, compute locked quantity and calculate available
     const results = await Promise.all(inventoryItems.map(async (item) => {
       const locked = await InventoryLock.aggregate([
         { $match: {
           itemName: item.itemName,
           batch: item.batch,
-          email: item.email,
           expiresAt: { $gt: new Date() }
         }},
         { $group: { _id: null, totalLocked: { $sum: "$quantity" } } }
       ]);
       const lockedQuantity = locked[0]?.totalLocked || 0;
+      const computedAvailable = Math.max(0, (item.quantity || 0) - lockedQuantity);
+
       return {
+        _id: item._id,
         itemName: item.itemName,
         batch: item.batch,
         quantity: item.quantity,
         lockedQuantity,
-        availableQuantity: item.quantity - lockedQuantity,
-        mrp: item.mrp,
-        purchaseRate: item.purchaseRate,
+        availableQuantity: computedAvailable,
+        mrp: item.mrp || item.purchaseRate || 0,
+        purchaseRate: item.purchaseRate || 0,
         expiryDate: item.expiryDate,
-        gstPercentage: item.gstPercentage,
+        gstPercentage: item.gstPercentage || 0,
         partyName: item.partyName,
-        description: item.description
+        pack: item.pack || 'Strip',
+        description: item.description || ''
       };
     }));
+
+    // Smart Sort: Prioritize prefix matches, then word matches, then substring matches, with soonest expiry first
+    if (itemName) {
+      const term = itemName.trim().toLowerCase();
+      results.sort((a, b) => {
+        const nameA = (a.itemName || '').toLowerCase();
+        const nameB = (b.itemName || '').toLowerCase();
+
+        const exactA = nameA === term ? 1 : 0;
+        const exactB = nameB === term ? 1 : 0;
+        if (exactA !== exactB) return exactB - exactA;
+
+        const startsA = nameA.startsWith(term) ? 1 : 0;
+        const startsB = nameB.startsWith(term) ? 1 : 0;
+        if (startsA !== startsB) return startsB - startsA;
+
+        const wordStartsA = nameA.includes(' ' + term) || nameA.includes('-' + term) ? 1 : 0;
+        const wordStartsB = nameB.includes(' ' + term) || nameB.includes('-' + term) ? 1 : 0;
+        if (wordStartsA !== wordStartsB) return wordStartsB - wordStartsA;
+
+        // Same match quality: order by available stock > 0, then expiry date ascending (FEFO)
+        const stockA = (a.availableQuantity > 0) ? 1 : 0;
+        const stockB = (b.availableQuantity > 0) ? 1 : 0;
+        if (stockA !== stockB) return stockB - stockA;
+
+        const expA = a.expiryDate ? new Date(a.expiryDate).getTime() : Infinity;
+        const expB = b.expiryDate ? new Date(b.expiryDate).getTime() : Infinity;
+        return expA - expB;
+      });
+    }
+
     res.status(200).json(results);
   } catch (error) {
     console.error('Error fetching available inventory:', error.message);
@@ -328,8 +421,8 @@ router.post('/add-update', strictWriteLimiter, speedLimiter, isAuthenticated, lo
 router.post('/update-after-sale', strictWriteLimiter, speedLimiter, isAuthenticated, logActivity('Process Sale', 'Inventory'), processSaleAndUpdateInventory);
 router.put('/update-party-names', strictWriteLimiter, isAuthenticated, updateInventoryPartyNames);
 
-// CRITICAL OPERATIONS (Most restrictive)
-router.post('/reset', criticalLimiter, strictWriteLimiter, isAuthenticated, resetInventory);
+// CRITICAL OPERATIONS (Most restrictive - Admin Only)
+router.post('/reset', criticalLimiter, strictWriteLimiter, isAuthenticated, authorizeRoles('admin'), resetInventory);
 
 // SEARCH OPERATIONS (Medium restrictive)
 router.get('/search', readLimiter, isAuthenticated, async (req, res) => {
@@ -340,14 +433,22 @@ router.get('/search', readLimiter, isAuthenticated, async (req, res) => {
     }
     
     try {
+        const escapeRegex = (str) => (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const query = { email };
-        if (itemName) query.itemName = { $regex: itemName, $options: 'i' };
-        if (batch) query.batch = { $regex: batch, $options: 'i' };
+        if (itemName) query.itemName = { $regex: escapeRegex(itemName.trim()), $options: 'i' };
+        if (batch) {
+            const trimmedBatch = batch.trim();
+            const alphanumericBatch = trimmedBatch.replace(/[^a-zA-Z0-9]/g, '');
+            const batchRegex = alphanumericBatch.length > 0
+                ? new RegExp(`^(${escapeRegex(trimmedBatch)}|${alphanumericBatch.split('').join('[-_\\s/]?')})$`, 'i')
+                : new RegExp(`^${escapeRegex(trimmedBatch)}$`, 'i');
+            query.batch = { $regex: batchRegex };
+        }
 
         const inventoryItems = await Inventory.find(query);
 
         if (!inventoryItems.length) {
-            return res.status(404).json({ message: 'No matching inventory items found' });
+            return res.status(200).json([]);
         }
         res.status(200).json(inventoryItems);
     } catch (error) {
@@ -447,84 +548,6 @@ router.use((error, req, res, next) => {
     }
     next();
 });
-
-// --- Primary Inventory Routes ---
-
-// GET /api/inventory/ - Fetch inventory (filtered by query params: email, itemName, batch, partyName)
-// Uses the updated getInventory which calls helpers
-router.get('/', isAuthenticated, getInventory); // Add authentication middleware
-
-// POST /api/inventory/add-update - Add or Update inventory item using correct logic
-// This is the endpoint your frontend should ideally use for manual adjustments
-router.post('/add-update', isAuthenticated, logActivity('Update Inventory', 'Inventory'), addOrUpdateInventoryItem); // Add authentication
-
-// --- NEW ROUTE: Update inventory after sale ---
-// POST /api/inventory/update-after-sale - Process a sale and update inventory
-router.post('/update-after-sale', isAuthenticated, logActivity('Process Sale', 'Inventory'), processSaleAndUpdateInventory);
-
-// --- Utility / Specific Routes ---
-
-// PUT /api/inventory/update-party-names - Utility to fix missing party names (reactive)
-router.put('/update-party-names', isAuthenticated, updateInventoryPartyNames);
-
-// GET /api/inventory/summary - Get a summarized view of inventory
-router.get('/summary', isAuthenticated, getInventorySummary); // Add route if using summary function
-
-// GET /api/inventory/search - Basic search (consider enhancing or using GET /)
-router.get('/search', isAuthenticated, async (req, res) => {
-    const { itemName, batch, email } = req.query;
-    // ... (keep existing logic, but ensure email is required and validated) ...
-     if (!email) {
-      return res.status(400).json({ message: 'Email is required to search inventory' });
-    }
-    // ... find logic ...
-     try {
-        const query = { email };
-        if (itemName) query.itemName = { $regex: itemName, $options: 'i' }; // Case-insensitive match
-        if (batch) query.batch = { $regex: batch, $options: 'i' }; // Make batch search case-insensitive too?
-
-        const inventoryItems = await Inventory.find(query);
-
-        if (!inventoryItems.length) {
-        return res.status(404).json({ message: 'No matching inventory items found' });
-        }
-        res.status(200).json(inventoryItems);
-    } catch (error) {
-        console.error('Error searching inventory:', error.message);
-        res.status(500).json({ message: 'Error searching inventory', error: error.message });
-    }
-});
-
-// GET /api/inventory/party-names/:email - Get unique party names
-router.get('/party-names/:email', isAuthenticated, async (req, res) => {
-    // ... (keep existing logic, ensure filtering by Boolean) ...
-    const { email } = req.params;
-    console.log('Fetching party names for email:', email);
-     try {
-    // Get all inventory items for the email
-    const inventoryItems = await Inventory.find({ email }).select('partyName'); // Select only partyName
-    // Get all purchase bills for the email
-    const purchaseBills = await Bill.find({ email, billType: 'purchase' }).select('partyName'); // Select only partyName
-    
-    // Extract unique party names, filter out null/empty strings
-    const inventoryPartyNames = new Set(inventoryItems.map(item => item.partyName).filter(Boolean));
-    const purchaseBillPartyNames = new Set(purchaseBills.map(bill => bill.partyName).filter(Boolean));
-    
-    const allPartyNames = [...new Set([...inventoryPartyNames, ...purchaseBillPartyNames])].sort(); // Sort alphabetically
-    console.log('All unique party names:', allPartyNames);
-    res.status(200).json(allPartyNames);
-     } catch (error) {
-         // ... error handling ...
-         console.error('Error fetching party names:', error.message);
-         res.status(500).json({ message: 'Error fetching party names', error: error.message });
-     }
-});
-
-// GET /api/inventory/customer/:customerName - Get purchase history for a customer
-router.get('/customer/:customerName', isAuthenticated, getCustomerPurchases); // Requires email in query
-
-// POST /api/inventory/reset - For testing
-router.post('/reset', isAuthenticated, resetInventory); // Use POST for destructive action
 
 export default router;
 

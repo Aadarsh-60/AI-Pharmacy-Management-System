@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import axiosInstance from '../utils/axios';
 
-const API_BASE_URL = `${process.env.REACT_APP_API_URL}`;
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // Set up axios auth interceptor
 axiosInstance.interceptors.request.use(
@@ -94,7 +94,8 @@ const SupplierExpiryBillGenerator = () => {
       console.log('Inventory API Response:', response.data);
       
       // Extract unique supplier names
-      const uniqueSuppliers = [...new Set(response.data.map(item => item.partyName).filter(Boolean))];
+      const rawSuppliers = Array.isArray(response.data) ? response.data : (response.data?.inventory || response.data?.items || []);
+      const uniqueSuppliers = [...new Set(rawSuppliers.map(item => item.partyName).filter(Boolean))];
       console.log('Unique suppliers found:', uniqueSuppliers);
       
       setAvailableParties(uniqueSuppliers.map(name => ({ name })));

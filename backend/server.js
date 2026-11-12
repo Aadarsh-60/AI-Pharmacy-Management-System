@@ -6,6 +6,15 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// Environment & Path Setup
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config();
+if (fs.existsSync(path.join(__dirname, 'config/.env'))) {
+  dotenv.config({ path: path.join(__dirname, 'config/.env') });
+}
 
 // Import Routes
 import userRoutes from './routes/userRoutes.js';
@@ -21,9 +30,6 @@ import forecastRoutes from './routes/forecastRoutes.js';
 
 // Middleware
 import errorMiddleware from './middleware/errorMiddleware.js';
-
-// Load Environment Variables
-dotenv.config({ path: './config/.env' });
 
 // Connect to MongoDB
 connectDB();
@@ -231,6 +237,17 @@ app.use((err, req, res, next) => {
 
 // Start Server
 const PORT = process.env.PORT || 3000;
+
+httpServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n⚠️ Port ${PORT} is already in use by an active server or process.`);
+    console.error(`👉 To free port ${PORT}, run in your terminal: npx kill-port ${PORT} (or: fuser -k ${PORT}/tcp)\n`);
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+  }
+});
+
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Health check available at: http://localhost:${PORT}/health`);

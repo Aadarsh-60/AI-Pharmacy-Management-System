@@ -4,16 +4,16 @@ import mongoose from 'mongoose';
 const itemSchema = new mongoose.Schema({
     itemName: { type: String, required: true },
     batch: { type: String, required: true },
-    quantity: { type: Number, required: true },
-    purchaseRate: { type: Number, required: true },
-    mrp: { type: Number, required: true },
-    expiryDate: { type: Date, required: true },
-    gstPercentage: { type: Number, required: true },
-    pack: { type: String, required: false }, // Optional, e.g., "strip", "bottle"
-    description: { type: String, required: false }, // Optional
+    quantity: { type: Number, required: true, default: 1 },
+    purchaseRate: { type: Number, required: true, default: 0 },
+    mrp: { type: Number, required: false, default: 0 },
+    expiryDate: { type: Date, required: false, default: () => new Date(Date.now() + 730 * 24 * 60 * 60 * 1000) },
+    gstPercentage: { type: Number, required: false, default: 0 },
+    pack: { type: String, required: false, default: 'Strip' }, // Optional, e.g., "strip", "bottle"
+    description: { type: String, required: false, default: '' }, // Optional
     discount: { type: Number, required: false, default: 0 }, // Discount per item
-    gstAmount: { type: Number, required: false }, // Computed GST amount (quantity * gstPercentage * purchaseRate)
-    totalAmount: { type: Number, required: false } // Computed total amount per item
+    gstAmount: { type: Number, required: false, default: 0 }, // Computed GST amount (quantity * gstPercentage * purchaseRate)
+    totalAmount: { type: Number, required: false, default: 0 } // Computed total amount per item
 });
 
 // Main bill schema
@@ -21,16 +21,25 @@ const billSchema = new mongoose.Schema({
     billType: { 
         type: String, 
         required: true, 
-        enum: ['purchase', 'return'] // Only 'purchase' is supported here
+        enum: ['purchase', 'return'],
+        default: 'purchase'
     },
-    supplierInvoiceNumber: { type: String, required: true },
-    receiptNumber: { type: String, required: true },
+    supplierInvoiceNumber: { 
+        type: String, 
+        required: true, 
+        default: () => `PUR-${Date.now().toString().slice(-6)}` 
+    },
+    receiptNumber: { 
+        type: String, 
+        required: true, 
+        default: () => `RCP-${Date.now().toString().slice(-6)}` 
+    },
     partyName: { type: String, required: true },
-    date: { type: Date, required: true },
+    date: { type: Date, required: true, default: Date.now },
     items: [itemSchema], // Array of items in the bill
-    purchaseAmount: { type: Number, required: true },
-    totalAmount: { type: Number, required: true },
-    discountAmount: { type: Number, required: true },
+    purchaseAmount: { type: Number, required: true, default: 0 },
+    totalAmount: { type: Number, required: true, default: 0 },
+    discountAmount: { type: Number, required: false, default: 0 },
     email: { type: String, required: true } // Added for inventory association
 }, {
     timestamps: true

@@ -2,13 +2,39 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import ProfileModal from './ProfileModal';
+
+const ROLE_CONFIG = {
+  admin: {
+    label: 'Admin',
+    icon: '👑',
+    badge: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
+  },
+  manager: {
+    label: 'Manager',
+    icon: '🩺',
+    badge: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700'
+  },
+  user: {
+    label: 'Staff',
+    icon: '💼',
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700'
+  }
+};
 
 const Sidebar = ({ children }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [currentRole, setCurrentRole] = useState(localStorage.getItem('role') || 'user');
+  const [userName, setUserName] = useState(localStorage.getItem('name') || 'Authorized User');
+  const [pharmacyName, setPharmacyName] = useState(localStorage.getItem('pharmacyName') || 'MediCare Pharmacy');
+
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
+
+  const roleMeta = ROLE_CONFIG[currentRole] || ROLE_CONFIG.user;
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -64,7 +90,7 @@ const Sidebar = ({ children }) => {
         { path: '/medicine-sales-summary', label: 'Sales Report', icon: '📈' },
         { path: '/purchase-history', label: 'Purchase History', icon: '🕰️' },
         { path: '/party-invoices', label: 'Party Invoices', icon: '🔍' },
-        { path: '/forecasting', label: 'Smart Forecasting', icon: '📈' },
+        { path: '/forecasting', label: 'Reorder Planner', icon: '📊' },
       ]
     },
     {
@@ -125,11 +151,11 @@ const Sidebar = ({ children }) => {
                 className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                   ${isActive(item.path)
                     ? isDark
-                      ? 'bg-indigo-600/20 text-indigo-400 shadow-sm'
-                      : 'bg-indigo-50 text-indigo-700 shadow-sm'
+                      ? 'bg-teal-900/30 text-teal-300 border border-teal-700/50 shadow-sm font-semibold'
+                      : 'bg-teal-50 text-teal-800 border border-teal-200/80 shadow-sm font-semibold'
                     : isDark
                       ? 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      : 'text-gray-600 hover:bg-slate-50 hover:text-gray-900'
                   }`}
               >
                 <span className="text-lg flex-shrink-0">{item.icon}</span>
@@ -142,6 +168,22 @@ const Sidebar = ({ children }) => {
 
       {/* Bottom Section */}
       <div className={`p-3 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} space-y-2`}>
+        {/* User Account / Profile */}
+        <button
+          onClick={() => setProfileModalOpen(true)}
+          className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm font-medium transition-all
+            ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'}`}
+          title="Account Profile & Security Settings"
+        >
+          <span className="text-lg flex-shrink-0">{roleMeta.icon}</span>
+          {isOpen && (
+            <div className="flex-1 text-left min-w-0">
+              <div className="text-xs font-semibold truncate">{userName}</div>
+              <div className="text-[10px] text-gray-400 truncate">{roleMeta.label} • Profile</div>
+            </div>
+          )}
+        </button>
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
@@ -226,6 +268,25 @@ const Sidebar = ({ children }) => {
 
           {/* Right side */}
           <div className="flex items-center space-x-3">
+            {/* User Profile Pill with Role Badge */}
+            <button
+              onClick={() => setProfileModalOpen(true)}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm transition-all duration-200 ${
+                isDark
+                  ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-200'
+                  : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-800'
+              }`}
+              title="Click to view/edit profile & security settings"
+            >
+              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center text-[10px] font-bold shadow-xs">
+                {userName.charAt(0).toUpperCase()}
+              </div>
+              <span className="font-semibold hidden md:inline truncate max-w-[120px]">{userName}</span>
+              <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${roleMeta.badge}`}>
+                {roleMeta.icon} {roleMeta.label}
+              </span>
+            </button>
+
             <button
               onClick={() => navigate('/support')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all duration-300 ${isDark ? 'bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-200'}`}
@@ -254,6 +315,17 @@ const Sidebar = ({ children }) => {
           </motion.div>
         </main>
       </div>
+
+      {/* User Profile & Security Settings Modal */}
+      <ProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        onProfileUpdated={(updated) => {
+          if (updated.name) setUserName(updated.name);
+          if (updated.pharmacyName) setPharmacyName(updated.pharmacyName);
+          if (updated.role) setCurrentRole(updated.role);
+        }}
+      />
     </div>
   );
 };

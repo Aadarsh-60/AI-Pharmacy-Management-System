@@ -12,7 +12,7 @@
 
 import jwt from 'jsonwebtoken';
 
-const generateToken = (userId, email) => {
+const generateToken = (userId, email, role = 'user') => {
     // Ensure the environment variable JWT_SECRET is defined
     const secret = process.env.JWT_SECRET;
     
@@ -21,8 +21,12 @@ const generateToken = (userId, email) => {
         throw new Error('JWT_SECRET environment variable is not set');
     }
 
-    // Generate the JWT token with both id and email
-    return jwt.sign({ id: userId, email: email }, secret, { expiresIn: '1h' });
+    // Generate the JWT token with id, email, and role
+    return jwt.sign(
+        { id: userId, email: email, role: role || 'user' },
+        secret,
+        { expiresIn: '24h' }
+    );
 };
 
 export default generateToken;

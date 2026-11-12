@@ -1,5 +1,6 @@
 import express from 'express';
 import User from '../models/User.js';
+import ActivityLog from '../models/ActivityLog.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto'; // For generating tokens
 import { sendVerificationEmail } from '../utils/emailService.js'; // For sending verification emails
@@ -431,8 +432,35 @@ router.post('/login', async (req, res) => {
         }
 
         console.log('🎫 Generating token...');
-        // Generate token for the authenticated user with both id and email
-        const token = generateToken(user._id, user.email);
+        // Generate token for the authenticated user with id, email, and role
+        const userRole = user.role || 'user';
+        const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || '127.0.0.1';
+
+        // Update login security audit stats
+        user.lastLogin = new Date();
+        user.lastLoginIP = String(clientIp);
+        user.loginCount = (user.loginCount || 0) + 1;
+        await user.save();
+
+        // Record security activity log
+        try {
+            await ActivityLog.create({
+                userId: user._id,
+                userEmail: user.email,
+                action: 'User Login',
+                resource: 'Authentication',
+                details: {
+                    role: userRole,
+                    pharmacyName: user.pharmacyName || 'MediCare Pharmacy',
+                    userAgent: req.headers['user-agent'] || 'Web Browser'
+                },
+                ipAddress: String(clientIp)
+            });
+        } catch (logErr) {
+            console.warn('⚠️ Could not log login activity:', logErr.message);
+        }
+
+        const token = generateToken(user._id, user.email, userRole);
 
         // Send the token in the response
         res.status(200).json({ 
@@ -440,16 +468,22 @@ router.post('/login', async (req, res) => {
             message: 'Login successful',
             token: token, 
             email: email.toLowerCase(),
+            role: userRole,
+            pharmacyName: user.pharmacyName || 'MediCare Pharmacy',
             user: {
                 id: user._id,
                 name: user.name,
                 email: user.email,
+                role: userRole,
+                pharmacyName: user.pharmacyName || 'MediCare Pharmacy',
                 gstNo: user.gstNo,
-                isVerified: user.isVerified
+                isVerified: user.isVerified,
+                lastLogin: user.lastLogin,
+                loginCount: user.loginCount
             }
         });
         
-        console.log('✅ Login completed successfully');
+        console.log('✅ Login completed successfully for role:', userRole);
     } catch (error) {
         console.error('❌ Login error:', error);
         res.status(500).json({ 
@@ -481,8 +515,13 @@ router.get('/profile', isAuthenticated, async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
+                role: user.role || 'user',
+                pharmacyName: user.pharmacyName || 'MediCare Pharmacy',
                 gstNo: user.gstNo,
                 isVerified: user.isVerified,
+                lastLogin: user.lastLogin,
+                lastLoginIP: user.lastLoginIP,
+                loginCount: user.loginCount || 1,
                 createdAt: user.createdAt
             }
         });
@@ -493,6 +532,136 @@ router.get('/profile', isAuthenticated, async (req, res) => {
         res.status(500).json({ 
             success: false,
             message: 'Server error fetching profile' 
+        });
+    }
+});
+
+// Change Password (protected route)
+router.put('/change-password', isAuthenticated, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password and new password are required'
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must be at least 6 characters long'
+            });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User account not found'
+            });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({
+                success: false,
+                message: 'Incorrect current password. Please try again.'
+            });
+        }
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+
+        try {
+            await ActivityLog.create({
+                userId: user._id,
+                userEmail: user.email,
+                action: 'Password Changed',
+                resource: 'Authentication',
+                details: { timestamp: new Date() },
+                ipAddress: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || '127.0.0.1'
+            });
+        } catch (logErr) {
+            console.warn('Could not log password change activity:', logErr.message);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Password updated successfully!'
+        });
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to change password. Please try again later.'
+        });
+    }
+});
+
+// Update Profile Details (protected route)
+router.put('/update-profile', isAuthenticated, async (req, res) => {
+    try {
+        const { name, pharmacyName, gstNo } = req.body;
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User account not found'
+            });
+        }
+
+        if (name) user.name = name.trim();
+        if (pharmacyName) user.pharmacyName = pharmacyName.trim();
+        if (gstNo) user.gstNo = gstNo.trim().toUpperCase();
+
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully!',
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role || 'user',
+                pharmacyName: user.pharmacyName,
+                gstNo: user.gstNo
+            }
+        });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update profile details'
+        });
+    }
+});
+
+// Get recent login history / audit logs (protected route)
+router.get('/login-history', isAuthenticated, async (req, res) => {
+    try {
+        const logs = await ActivityLog.find({
+            $or: [
+                { userId: req.user.id },
+                { userEmail: req.user.email }
+            ]
+        })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
+
+        res.status(200).json({
+            success: true,
+            logs
+        });
+    } catch (error) {
+        console.error('Login history error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch login history'
         });
     }
 });

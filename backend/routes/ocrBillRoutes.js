@@ -1,22 +1,33 @@
 import express from 'express';
 import multer from 'multer';
-import path from 'path';
 import { ocrBillUpload } from '../controllers/ocrBillController.js';
 
 const router = express.Router();
 
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+// Use in-memory storage for speed, security, and zero disk leaks
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10 MB maximum
   },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
+  fileFilter: (req, file, cb) => {
+    const allowedMime = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/heic',
+      'application/pdf'
+    ];
+    if (allowedMime.includes(file.mimetype) || file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files (JPG, PNG, WebP) or PDF documents are supported for OCR.'));
+    }
   }
 });
-const upload = multer({ storage });
 
 // POST /api/ocr-bill
 router.post('/', upload.single('file'), ocrBillUpload);
 
-export default router; 
+export default router;

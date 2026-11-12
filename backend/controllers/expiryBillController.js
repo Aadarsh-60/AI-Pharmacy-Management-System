@@ -587,11 +587,19 @@ export const getExpiringItemsByParty = async (req, res) => {
                     if (itemExpiryDate >= startDateObj && itemExpiryDate <= endDateObj) {
                         console.log(`Processing item: ${item.itemName}, batch: ${item.batch}, expiry: ${itemExpiryDate.toISOString()}`);
                         
-                        // Look up current inventory quantity instead of using purchase quantity
+                        const escapeRegex = (str) => (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const trimmedItemName = (item.itemName || '').trim();
+                        const trimmedBatch = (item.batch || '').trim();
+                        const alphanumericBatch = trimmedBatch.replace(/[^a-zA-Z0-9]/g, '');
+                        const batchRegex = alphanumericBatch.length > 0
+                            ? new RegExp(`^(${escapeRegex(trimmedBatch)}|${alphanumericBatch.split('').join('[-_\\s/]?')})$`, 'i')
+                            : new RegExp(`^${escapeRegex(trimmedBatch)}$`, 'i');
+
+                        // Look up current inventory quantity with flexible matching
                         const inventoryItem = await Inventory.findOne({
                             email,
-                            itemName: item.itemName,
-                            batch: item.batch
+                            itemName: { $regex: new RegExp(`^${escapeRegex(trimmedItemName)}$`, 'i') },
+                            batch: { $regex: batchRegex }
                         });
                         
                         // Get the actual available quantity

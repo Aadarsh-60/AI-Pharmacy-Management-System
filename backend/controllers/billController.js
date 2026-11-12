@@ -7,7 +7,7 @@ import Inventory from '../models/Inventory.js'; // Adjust the path as needed
 import CustomerPurchase from "../models/CustomerPurchase.js"; // Adjust the path if necessary
 import ReturnBill from '../models/ReturnBillModel.js';  // Fixed import path
 import { validateGSTNumber } from '../utils/validators.js';
-import { updateInventoryInternal } from './InventoryController.js';
+import { updateInventoryInternal, updateInventoryAfterSale } from './InventoryController.js';
 import { emitToUser, emitToAll, SOCKET_EVENTS } from '../utils/socketUtils.js';
 import { generateSaleBillPDF } from '../utils/pdfGenerator.js';
 import { checkAndLockInventory, unlockInventory } from '../utils/inventoryLockUtils.js';
@@ -243,41 +243,98 @@ export const createPurchaseBill = async (req, res) => {
     } = req.body;
 
     try {
-        // Validation
-        if (!email || !partyName || !items || !items.length) {
-            console.error("[createPurchaseBill] Validation failed: Missing required fields");
-            return res.status(400).json({ message: 'Missing required fields: email, partyName, or items' });
+        const userEmail = (email || req.user?.email || '').trim().toLowerCase();
+        if (!userEmail) {
+            console.error("[createPurchaseBill] Validation failed: Missing user email");
+            return res.status(400).json({ 
+                message: 'User authentication required. Please log in again.',
+                error: 'Missing user email in request.'
+            });
         }
         
-        const standardPartyName = partyName.trim();
-        if (!standardPartyName) {
-             console.error("[createPurchaseBill] Validation failed: Party name empty after trimming.");
-             return res.status(400).json({ message: 'Party name is required and cannot be only whitespace' });
+        const standardPartyName = (partyName || '').trim() || 'Direct Supplier';
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            console.error("[createPurchaseBill] Validation failed: Items empty");
+            return res.status(400).json({ 
+                message: 'Please add at least one medicine item to the purchase bill.',
+                error: 'No items provided.'
+            });
+        }
+
+        // Helper to parse expiry date safely
+        const parseExpiry = (val) => {
+            if (!val) return new Date(Date.now() + 730 * 24 * 60 * 60 * 1000);
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? new Date(Date.now() + 730 * 24 * 60 * 60 * 1000) : d;
+        };
+
+        // Filter out empty rows and sanitize
+        const cleanItems = items
+            .filter(item => item && (item.itemName?.trim() || item.batch?.trim() || item.quantity > 0))
+            .map((item, idx) => {
+                const itemName = (item.itemName || '').trim() || `Medicine-${idx + 1}`;
+                const batch = (item.batch || '').trim() || `BAT-${Date.now().toString().slice(-4)}${idx}`;
+                const quantity = Math.max(0, parseFloat(item.quantity) || 1);
+                const purchaseRate = Math.max(0, parseFloat(item.purchaseRate) || 0);
+                const mrp = Math.max(0, parseFloat(item.mrp) || purchaseRate || 0);
+                const gstPercentage = Math.max(0, parseFloat(item.gstPercentage) || 0);
+                const discount = Math.max(0, parseFloat(item.discount) || 0);
+
+                const itemTotal = quantity * purchaseRate;
+                const itemDiscountAmt = (itemTotal * discount) / 100;
+                const itemAfterDiscount = itemTotal - itemDiscountAmt;
+                const itemGstAmt = (itemAfterDiscount * gstPercentage) / 100;
+                const itemNet = itemAfterDiscount + itemGstAmt;
+
+                return {
+                    itemName,
+                    batch,
+                    quantity,
+                    purchaseRate,
+                    mrp,
+                    expiryDate: parseExpiry(item.expiryDate),
+                    gstPercentage,
+                    pack: item.pack?.trim() || 'Strip',
+                    description: item.description?.trim() || '',
+                    discount,
+                    gstAmount: itemGstAmt,
+                    totalAmount: itemTotal,
+                    netAmount: itemNet
+                };
+            });
+
+        if (cleanItems.length === 0) {
+            return res.status(400).json({ 
+                message: 'Please enter at least one medicine item name.',
+                error: 'All medicine items had empty names.'
+            });
+        }
+
+        const computedPurchaseAmt = cleanItems.reduce((sum, item) => sum + item.totalAmount, 0);
+        const computedDiscountAmt = cleanItems.reduce((sum, item) => sum + ((item.totalAmount * item.discount) / 100), 0);
+        const computedTotalAmt = computedPurchaseAmt;
+
+        const cleanSupplierInvoiceNumber = (supplierInvoiceNumber || '').trim() || `PUR-${Date.now().toString().slice(-6)}`;
+        const cleanReceiptNumber = (receiptNumber || '').trim() || `RCP-${Date.now().toString().slice(-6)}`;
+        
+        let billDate = new Date();
+        if (date && !isNaN(new Date(date).getTime())) {
+            billDate = new Date(date);
         }
 
         // Create Bill object
         const purchaseBill = new Bill({
             billType: 'purchase', 
-            purchaseAmount, 
-            totalAmount, 
-            discountAmount,
-            date: date || new Date(), 
-            supplierInvoiceNumber, 
-            receiptNumber,
+            purchaseAmount: Number.isFinite(Number(purchaseAmount)) ? Number(purchaseAmount) : computedPurchaseAmt, 
+            totalAmount: Number.isFinite(Number(totalAmount)) ? Number(totalAmount) : computedTotalAmt, 
+            discountAmount: Number.isFinite(Number(discountAmount)) ? Number(discountAmount) : computedDiscountAmt,
+            date: billDate, 
+            supplierInvoiceNumber: cleanSupplierInvoiceNumber, 
+            receiptNumber: cleanReceiptNumber,
             partyName: standardPartyName, 
-            email,
-            items: items.map(item => ({ 
-                itemName: item.itemName?.trim(), 
-                batch: item.batch?.trim(), 
-                quantity: item.quantity,
-                purchaseRate: item.purchaseRate, 
-                mrp: item.mrp, 
-                expiryDate: item.expiryDate,
-                gstPercentage: item.gstPercentage, 
-                pack: item.pack, 
-                description: item.description,
-                discount: item.discount
-            })),
+            email: userEmail,
+            items: cleanItems
         });
 
         // Save Bill
@@ -347,7 +404,7 @@ export const createPurchaseBill = async (req, res) => {
     } catch (error) {
         console.error('[createPurchaseBill] CRITICAL error during bill saving or processing:', error);
         res.status(500).json({ 
-            message: 'Error saving purchase bill',
+            message: error.message || 'Error saving purchase bill',
             error: error.message
         });
     }
@@ -870,12 +927,16 @@ export const createSaleBill = async (req, res) => {
       // Prepare inventory validation data first (to avoid partial processing)
       const inventoryCheckResults = [];
       for (const item of items) {
-          // Destructure fields expected per item from the NEW schema/payload
-          const { itemName, batch, quantity, mrp, discount, gstPercentage, expiryDate,
-                  sgst, cgst, igst, totalGst, netAmount } = item; // Get all relevant fields
+          // Destructure fields expected per item with resilient fallbacks
+          const { itemName, batch, quantity, mrp, discount, gstPercentage, expiryDate } = item;
+          const totalGst = item.totalGst != null ? item.totalGst : (item.gstAmount != null ? item.gstAmount : 0);
+          const netAmount = item.netAmount != null ? item.netAmount : (item.amount != null ? item.amount : 0);
+          const sgst = item.sgst != null ? item.sgst : Number(totalGst) / 2;
+          const cgst = item.cgst != null ? item.cgst : Number(totalGst) / 2;
+          const igst = item.igst != null ? item.igst : 0;
 
           // --- Basic Item Validation ---
-          if (!itemName || !batch || quantity == null || mrp == null || discount == null || gstPercentage == null || expiryDate == null || sgst == null || cgst == null || igst == null || totalGst == null || netAmount == null ) {
+          if (!itemName || !batch || quantity == null || mrp == null || discount == null || gstPercentage == null || !expiryDate) {
                // Log the specific item causing the issue for easier debugging
               console.error("Validation failed for item:", item);
               return res.status(400).json({ message: `Missing required fields in item: ${itemName} (${batch})` });
@@ -901,30 +962,69 @@ export const createSaleBill = async (req, res) => {
           }
           // --- End Basic Item Validation ---
 
+          // --- Flexible Item & Batch Matching ---
+          const escapeRegex = (str) => (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const trimmedItemName = (itemName || '').trim();
+          const trimmedBatch = (batch || '').trim();
+          const alphanumericBatch = trimmedBatch.replace(/[^a-zA-Z0-9]/g, '');
+          const batchRegex = alphanumericBatch.length > 0
+              ? new RegExp(`^(${escapeRegex(trimmedBatch)}|${alphanumericBatch.split('').join('[-_\\s/]?')})$`, 'i')
+              : new RegExp(`^${escapeRegex(trimmedBatch)}$`, 'i');
+
           // Find all inventory entries matching item, batch, and user email
-          const inventoryItems = await Inventory.find({
+          let inventoryItems = await Inventory.find({
               email,
-              // Use case-insensitive regex for matching flexibility
-              itemName: { $regex: new RegExp(`^${itemName}$`, 'i') },
-              batch: { $regex: new RegExp(`^${batch}$`, 'i') }
+              itemName: { $regex: new RegExp(`^${escapeRegex(trimmedItemName)}$`, 'i') },
+              batch: { $regex: batchRegex }
           }).sort({ expiryDate: 1 }); // Sort by expiry (FIFO for deduction)
+
+          // Fallback 1: If not found, try flexible matching on itemName with matching batch for this user
+          if (!inventoryItems.length) {
+              inventoryItems = await Inventory.find({
+                  email: { $regex: new RegExp(`^${escapeRegex(email)}$`, 'i') },
+                  itemName: { $regex: new RegExp(escapeRegex(trimmedItemName), 'i') },
+                  batch: { $regex: batchRegex }
+              }).sort({ expiryDate: 1 });
+          }
+
+          // Fallback 2: Search across store inventory (in case item was added by store manager/owner)
+          if (!inventoryItems.length) {
+              inventoryItems = await Inventory.find({
+                  itemName: { $regex: new RegExp(escapeRegex(trimmedItemName), 'i') },
+                  batch: { $regex: batchRegex }
+              }).sort({ expiryDate: 1 });
+          }
+
+          // Fallback 3: Multi-word match across store
+          if (!inventoryItems.length && trimmedItemName.includes(' ')) {
+              const words = trimmedItemName.split(/\s+/).map(w => escapeRegex(w)).filter(Boolean);
+              const wordPattern = words.map(w => `(?=.*${w})`).join('');
+              inventoryItems = await Inventory.find({
+                  itemName: { $regex: new RegExp(wordPattern, 'i') },
+                  batch: { $regex: batchRegex }
+              }).sort({ expiryDate: 1 });
+          }
 
           if (!inventoryItems.length) {
               return res.status(400).json({ message: `Item ${itemName} (Batch: ${batch}) not found in inventory` });
           }
+
+          // Use canonical batch name and item name from found inventory item
+          const canonicalBatch = inventoryItems[0].batch;
+          const canonicalItemName = inventoryItems[0].itemName;
 
           // Calculate total available quantity across found inventory entries
           const totalAvailableQuantity = inventoryItems.reduce((sum, inv) => sum + inv.quantity, 0);
 
           // Check if sufficient stock exists
           if (totalAvailableQuantity < parsedQuantity) {
-              return res.status(400).json({ message: `Insufficient stock for ${itemName} (Batch: ${batch}). Available: ${totalAvailableQuantity}, Requested: ${parsedQuantity}` });
+              return res.status(400).json({ message: `Insufficient stock for ${canonicalItemName} (Batch: ${canonicalBatch}). Available: ${totalAvailableQuantity}, Requested: ${parsedQuantity}` });
           }
 
           // Store inventory check result for this item
           inventoryCheckResults.push({
-              itemName,
-              batch,
+              itemName: canonicalItemName,
+              batch: canonicalBatch,
               quantity: parsedQuantity,
               inventoryItems
           });
@@ -932,8 +1032,8 @@ export const createSaleBill = async (req, res) => {
           // --- Prepare Item for Saving (Matching Schema) ---
           // This object structure MUST match the Mongoose schema definition for `items`
           processedItems.push({
-              itemName: itemName,
-              batch: batch,
+              itemName: canonicalItemName,
+              batch: canonicalBatch,
               quantity: parsedQuantity,
               mrp: parsedMrp,
               discount: parsedDiscount,
@@ -946,10 +1046,10 @@ export const createSaleBill = async (req, res) => {
               totalGst: parsedTotalGst, // Use totalGst from payload
               netAmount: parsedNetAmount // Use netAmount from payload
           });
-          // Lock inventory for each item before proceeding
+          // Lock inventory for each item before proceeding using canonical identifiers
           await checkAndLockInventory({
-            itemName: itemName,
-            batch: batch,
+            itemName: canonicalItemName,
+            batch: canonicalBatch,
             quantity: Number(quantity),
             lockedBy: req.user.email,
             lockType: 'sale',
@@ -957,8 +1057,8 @@ export const createSaleBill = async (req, res) => {
             InventoryModel: Inventory
           });
           lockedItems.push({
-            itemName: itemName,
-            batch: batch,
+            itemName: canonicalItemName,
+            batch: canonicalBatch,
             lockedBy: req.user.email,
             lockType: 'sale',
             email: req.user.email
@@ -1001,15 +1101,11 @@ export const createSaleBill = async (req, res) => {
       let inventoryUpdates;
       let inventoryUpdateSuccess = false;
       try {
-          // Import the specialized function
-          const { updateInventoryAfterSale } = await import('../controllers/InventoryController.js');
           inventoryUpdates = await updateInventoryAfterSale(saleData);
           inventoryUpdateSuccess = true;
           console.log("Inventory updated successfully after sale:", inventoryUpdates);
       } catch (inventoryError) {
           console.error("Error updating inventory after sale:", inventoryError);
-          // Don't fail the request since bill is created, but notify client
-          // This is important because the bill is already saved
       }
       // --- End Inventory Update ---
 
@@ -2027,6 +2123,7 @@ export const getMedicineSalesDetails = async (req, res) => {
 
             // Return sale details for each matching item
             return matchingItems.map(item => ({
+                itemName: item.itemName,
                 saleInvoiceNumber: bill.saleInvoiceNumber,
                 date: bill.date,
                 partyName: bill.partyName,

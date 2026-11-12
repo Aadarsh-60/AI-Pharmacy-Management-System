@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="medGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00897b"/>
+      <stop offset="100%" stop-color="#004d40"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#medGrad)"/>
+  <g transform="rotate(-45 32 32)">
+    <!-- Pill white cap -->
+    <path d="M22,32 L42,32 L42,22 C42,16.477 37.523,12 32,12 C26.477,12 22,16.477 22,22 Z" fill="#ffffff"/>
+    <!-- Pill teal body -->
+    <path d="M22,32 L42,32 L42,42 C42,47.523 37.523,52 32,52 C26.477,52 22,47.523 22,42 Z" fill="#80cbc4"/>
+    <!-- Center divider line -->
+    <line x1="22" y1="32" x2="42" y2="32" stroke="#004d40" stroke-width="1.8"/>
+    <!-- Highlight sheen -->
+    <path d="M26,18 C27,15.5 29,14.5 32,14.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  </g>
+</svg>
+

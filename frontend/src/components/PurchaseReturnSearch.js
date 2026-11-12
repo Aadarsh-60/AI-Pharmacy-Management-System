@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import axios from 'axios';
 import axiosInstance from '../utils/axios';
 
-const API_BASE_URL = `${process.env.REACT_APP_API_URL}`;
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const PurchaseReturnSearch = () => {
   const [email, setEmail] = useState('');
@@ -41,16 +41,25 @@ const PurchaseReturnSearch = () => {
         { params: { email: formattedEmail, supplierName: formattedSupplierName } }
       );
 
-      const items = response.data.map(item => ({
+      const rawList = Array.isArray(response.data)
+        ? response.data
+        : (response.data?.items || response.data?.data || []);
+
+      const items = rawList.map(item => ({
         ...item,
-        totalPurchaseValue: item.purchasedQuantity * item.purchaseRate,
-        totalSaleValue: item.soldQuantity * item.mrp,
-        avgPrice: item.purchaseRate,
+        totalPurchaseValue: (item.purchasedQuantity || 0) * (item.purchaseRate || 0),
+        totalSaleValue: (item.soldQuantity || 0) * (item.mrp || 0),
+        avgPrice: item.purchaseRate || 0,
         expiryStatus: getExpiryStatus(item.expiryDate)
       }));
 
-      setSearchResults(items);
-      setActiveTab('results');
+      if (items.length === 0) {
+        setError(`No returnable items found for "${formattedSupplierName}".`);
+        setSearchResults([]);
+      } else {
+        setSearchResults(items);
+        setActiveTab('results');
+      }
     } catch (err) {
       // Log the full error for debugging
       console.error('Purchase Return Search Error:', err, err.response);

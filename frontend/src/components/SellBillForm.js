@@ -3,6 +3,9 @@ import jsPDF from "jspdf";
 import { useSocket } from '../context/SocketContext';
 import { SOCKET_EVENTS } from '../utils/socketUtils';
 import { useRef } from 'react';
+import toast from 'react-hot-toast';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // Custom hook for managing items
 const useItems = (initialGstNumber) => {
@@ -15,10 +18,13 @@ const useItems = (initialGstNumber) => {
       availableQuantity: 0,
       quantity: "",
       mrp: "",
-      discount: "20",
+      saleRate: "",
+      purchaseRate: "",
+      discount: "0",
       amount: "",
       gstNo: initialGstNumber,
-      gstPercentage: "0"
+      gstPercentage: "0",
+      expiryDate: ""
     }
   ];
 
@@ -40,10 +46,13 @@ const useItems = (initialGstNumber) => {
             availableQuantity: 0,
             quantity: "",
             mrp: "",
-            discount: "20",
+            saleRate: "",
+            purchaseRate: "",
+            discount: "0",
             amount: "",
             gstNo: initialGstNumber,
-            gstPercentage: "0"
+            gstPercentage: "0",
+            expiryDate: ""
           }
         ];
       
@@ -55,12 +64,19 @@ const useItems = (initialGstNumber) => {
           availableQuantity: 0,
           quantity: "",
           mrp: "",
-          discount: "20",
+          saleRate: "",
+          purchaseRate: "",
+          discount: "0",
           amount: "",
           gstNo: initialGstNumber,
-          gstPercentage: "0"
+          gstPercentage: "0",
+          expiryDate: ""
         }];
       
+      case 'REMOVE_ITEM':
+        if (state.length <= 1) return state;
+        return state.filter((_, idx) => idx !== action.index);
+
       case 'UPDATE_ALL_GST':
         return state.map(item => ({
           ...item,
@@ -88,11 +104,15 @@ const useItems = (initialGstNumber) => {
     dispatch({ type: 'ADD_ITEM' });
   };
 
+  const removeItem = (index) => {
+    dispatch({ type: 'REMOVE_ITEM', index });
+  };
+
   const resetItems = () => {
     dispatch({ type: 'RESET_ITEMS' });
   };
 
-  return { items, updateItem, addItem, resetItems };
+  return { items, updateItem, addItem, removeItem, resetItems };
 };
 
 const SellBillForm = () => {
@@ -113,11 +133,53 @@ const SellBillForm = () => {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState(null);
 
+  // AI Drug Safety & Interaction state
+  const [safetyLoading, setSafetyLoading] = useState(false);
+  const [safetyModalOpen, setSafetyModalOpen] = useState(false);
+  const [safetyResult, setSafetyResult] = useState(null);
+
   const socket = useSocket();
   const fetchTimeout = useRef(null);
 
   // Use the custom hook for items management
-  const { items, updateItem, addItem, resetItems } = useItems(sellDetails.gstNumber);
+  const { items, updateItem, addItem, removeItem, resetItems } = useItems(sellDetails.gstNumber);
+
+  // Handler for AI Drug Interaction & Patient Safety Check
+  const handleCheckDrugSafety = async () => {
+    const medNames = items
+      .map(item => item.itemName?.trim())
+      .filter(Boolean);
+
+    if (medNames.length === 0) {
+      toast.error('Please add at least one medicine to the bill first.');
+      return;
+    }
+
+    setSafetyLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chatbot/check-interactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ medicines: medNames })
+      });
+      const data = await res.json();
+      if (res.status === 404) {
+        toast.error('Backend route not loaded. Please restart your backend server (npm run dev).');
+        return;
+      }
+      if (data.success && data.data) {
+        setSafetyResult(data.data);
+        setSafetyModalOpen(true);
+      } else {
+        toast.error(data.message || 'Safety check could not be completed.');
+      }
+    } catch (err) {
+      console.error('Safety check error:', err);
+      toast.error('Error connecting to AI Safety engine. Is the backend running?');
+    } finally {
+      setSafetyLoading(false);
+    }
+  };
 
   // Fetch the next invoice number when component mounts
   useEffect(() => {
@@ -146,7 +208,7 @@ const SellBillForm = () => {
           return;
         }
         
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/next-invoice-number`, {
+        const response = await fetch(`${API_BASE_URL}/api/bills/next-invoice-number`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -202,7 +264,7 @@ const SellBillForm = () => {
       
       console.log("Generating next invoice number with:", { token, email });
       
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/next-invoice-number`, {
+      const response = await fetch(`${API_BASE_URL}/api/bills/next-invoice-number`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,138 +306,61 @@ const SellBillForm = () => {
     }
   };
 
-  // Debounce function
-  const debounce = (func, delay) => {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func(...args), delay);
-    };
-  };
-
-  // Replace inventory fetch logic to use /api/inventory/available
-  const fetchInventoryData = useCallback(
-    debounce(async (itemName, email, index) => {
-      if (!itemName || !email) return;
-      setSearchLoading(true);
-      try {
-        const token = localStorage.getItem("token");
-        // Use the new endpoint
-        const response = await fetch(
-          `http://localhost:5000/api/inventory/available?itemName=${encodeURIComponent(
-            itemName.toLowerCase()
-          )}&email=${encodeURIComponent(email)}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${await response.text()}`);
-        }
-        const data = await response.json();
-        if (data.length > 0) {
-          setSearchResults(data);
-          setShowAutocomplete(true);
-          // Update the current item with the first result
-          const batchOptions = data.map((batch) => ({
-            batchNumber: batch.batch.replace(/[^a-zA-Z0-9]/g, ''),
-            quantity: batch.availableQuantity, // Use availableQuantity
-            mrp: batch.mrp,
-            purchaseRate: batch.purchaseRate,
-            gstNo: sellDetails.gstNumber,
-            expiryDate: batch.expiryDate
-          }));
-          const sanitizedBatch = data[0].batch.replace(/[^a-zA-Z0-9]/g, '');
-          updateItem(index, {
-            batchOptions,
-            batch: sanitizedBatch,
-            availableQuantity: data[0].availableQuantity, // Use availableQuantity
-            mrp: data[0].mrp?.toString() || "",
-            purchaseRate: data[0].purchaseRate?.toString() || "",
-            gstPercentage: data[0].gstPercentage?.toString() || "0",
-            expiryDate: data[0].expiryDate
-          });
-          setMessage("");
-        } else {
-          setSearchResults([]);
-          setShowAutocomplete(false);
-          setMessage(`No inventory found for ${itemName}`);
-          updateItem(index, {
-            batchOptions: [],
-            batch: "",
-            availableQuantity: 0,
-            mrp: "",
-            purchaseRate: "",
-            gstPercentage: "0",
-            expiryDate: ""
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching inventory:", error);
-        setMessage(`Error fetching inventory data: ${error.message}`);
-        setSearchResults([]);
-        setShowAutocomplete(false);
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 300),
-    [sellDetails.gstNumber, updateItem]
-  );
-
-const handleItemChange = (index, event) => {
-  const { name, value } = event.target;
-  const email = localStorage.getItem("email");
-  
-  // Handle item name change with debounced search
-  if (name === "itemName") {
-    updateItem(index, { itemName: value });
-    
-    if (value && email) {
-      setActiveItemIndex(index);
-      fetchInventoryData(value, email, index);
-    } else {
-      setShowAutocomplete(false);
-    }
-    return;
-  }
-  
   const calculateItemTotals = (updatedItemData) => {
     const qty = parseFloat(updatedItemData.quantity) || 0;
     const mrp = parseFloat(updatedItemData.mrp) || 0;
-    const discount = parseFloat(updatedItemData.discount) || 0;
+    let saleRate = parseFloat(updatedItemData.saleRate);
+    let discount = parseFloat(updatedItemData.discount) || 0;
     const gstPercentage = parseFloat(updatedItemData.gstPercentage) || 0;
     const availableQty = parseFloat(updatedItemData.availableQuantity) || 0;
     
-    if (qty > availableQty) {
-      setMessage({ type: 'error', text: `Insufficient stock for ${updatedItemData.itemName}` });
-      return { ...updatedItemData, amount: "-" }; // keep amount empty on error
+    // Default saleRate to MRP if not explicitly provided
+    if (isNaN(saleRate) || saleRate <= 0) {
+      saleRate = mrp > 0 ? mrp : 0;
+    }
+
+    if (qty > availableQty && availableQty > 0) {
+      setMessage({ type: 'error', text: `Insufficient stock for ${updatedItemData.itemName}. Available: ${availableQty}` });
+      return { 
+        ...updatedItemData, 
+        saleRate: saleRate > 0 ? saleRate.toString() : (updatedItemData.saleRate || ""),
+        amount: "-" 
+      };
     } else if (qty < 0) {
       setMessage({ type: 'error', text: "Quantity cannot be negative" });
-      return { ...updatedItemData, amount: "-" };
+      return { 
+        ...updatedItemData, 
+        saleRate: saleRate > 0 ? saleRate.toString() : (updatedItemData.saleRate || ""),
+        amount: "-" 
+      };
     }
     
     if (qty === 0) {
-      // If quantity is 0 or empty, clear the amounts but keep the base fields
-      return { ...updatedItemData, amount: "-" };
+      return { 
+        ...updatedItemData, 
+        saleRate: saleRate > 0 ? saleRate.toString() : (updatedItemData.saleRate || ""),
+        amount: "-",
+        netAmount: "-"
+      };
     }
 
-    const totalAmount = qty * mrp;
-    const discountAmount = (totalAmount * discount) / 100;
-    const amountAfterDiscount = totalAmount - discountAmount;
+    // Effective unit price after discount
+    const effectiveUnitPrice = discount > 0 ? saleRate * (1 - discount / 100) : saleRate;
+    const totalAmount = qty * effectiveUnitPrice;
+    const undiscountedTotal = qty * saleRate;
+    const discountAmount = undiscountedTotal - totalAmount;
     
-    const gstAmount = (amountAfterDiscount * gstPercentage) / 100;
+    const gstAmount = (totalAmount * gstPercentage) / 100;
     const sgst = gstAmount / 2;
     const cgst = gstAmount / 2;
     const igst = 0;
     
-    const netAmount = amountAfterDiscount + gstAmount;
+    const netAmount = totalAmount + gstAmount;
     
     setMessage("");
     return {
       ...updatedItemData,
+      saleRate: saleRate.toString(),
       amount: netAmount.toFixed(2),
       totalAmount: totalAmount.toFixed(2),
       discountAmount: discountAmount.toFixed(2),
@@ -388,36 +373,204 @@ const handleItemChange = (index, event) => {
     };
   };
 
-  // Handle batch selection
-  if (name === "batch") {
-    const currentItem = items[index];
-    const cleanBatch = value.replace(/[^a-zA-Z0-9]/g, '');
-    const selectedBatch = currentItem.batchOptions.find(
-      (batch) => batch.batchNumber === cleanBatch
-    );
+  // Stable timer ref for debounced search
+  const debounceTimerRef = useRef(null);
+
+  // Fetch inventory batches and available stock for autocomplete dropdown without overwriting user's typing
+  const fetchInventoryData = useCallback((itemName, email, index) => {
+    if (!itemName || itemName.trim().length < 2) {
+      setSearchResults([]);
+      setShowAutocomplete(false);
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    setSearchLoading(true);
+
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const safeEmail = email || localStorage.getItem("email") || "";
+        const response = await fetch(
+          `${API_BASE_URL}/api/inventory/available?itemName=${encodeURIComponent(
+            itemName.trim()
+          )}&email=${encodeURIComponent(safeEmail)}`,
+          {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${await response.text()}`);
+        }
+
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+          setSearchResults(data);
+          setShowAutocomplete(true);
+          setMessage("");
+
+          // If the user typed or scanned an EXACT match (case-insensitive), auto-populate batch & price
+          const exactMatch = data.find(
+            b => b.itemName?.trim().toLowerCase() === itemName.trim().toLowerCase()
+          );
+          if (exactMatch) {
+            const matchingBatches = data.filter(
+              r => r.itemName?.trim().toLowerCase() === exactMatch.itemName?.trim().toLowerCase()
+            );
+            const batchOptions = matchingBatches.map((b) => ({
+              batchNumber: b.batch || 'DEFAULT',
+              quantity: b.availableQuantity ?? b.quantity ?? 0,
+              mrp: b.mrp,
+              purchaseRate: b.purchaseRate,
+              gstNo: sellDetails.gstNumber,
+              expiryDate: b.expiryDate,
+              gstPercentage: b.gstPercentage
+            }));
+
+            const inStockBatch = matchingBatches.find(b => (b.availableQuantity ?? b.quantity ?? 0) > 0) || matchingBatches[0];
+            const autoMrp = inStockBatch.mrp?.toString() || inStockBatch.purchaseRate?.toString() || "";
+            const autoSaleRate = autoMrp;
+            const autoPurchaseRate = inStockBatch.purchaseRate?.toString() || "";
+            const autoGst = inStockBatch.gstPercentage?.toString() || "0";
+            const autoAvailable = inStockBatch.availableQuantity ?? inStockBatch.quantity ?? 0;
+            const defaultQty = autoAvailable > 0 ? "1" : "0";
+
+            let newRow = {
+              itemName: exactMatch.itemName,
+              batchOptions,
+              batch: inStockBatch.batch || 'DEFAULT',
+              availableQuantity: autoAvailable,
+              quantity: defaultQty,
+              mrp: autoMrp,
+              saleRate: autoSaleRate,
+              purchaseRate: autoPurchaseRate,
+              discount: "0",
+              gstPercentage: autoGst,
+              expiryDate: inStockBatch.expiryDate || ""
+            };
+
+            newRow = calculateItemTotals(newRow);
+            updateItem(index, newRow);
+          }
+        } else {
+          setSearchResults([]);
+          setShowAutocomplete(false);
+          setMessage(`No existing stock found for "${itemName}". You can still create the invoice manually.`);
+        }
+      } catch (error) {
+        console.error("Error fetching inventory:", error);
+        setMessage(`Error checking inventory: ${error.message}`);
+        setSearchResults([]);
+        setShowAutocomplete(false);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 250);
+  }, [sellDetails.gstNumber, updateItem]);
+
+  const handleItemChange = (index, event) => {
+    const { name, value } = event.target;
+    const email = localStorage.getItem("email") || "";
     
-    if (selectedBatch) {
-      let updatedPayload = {
-        ...currentItem,
-        batch: cleanBatch,
-        availableQuantity: selectedBatch.quantity,
-        mrp: selectedBatch.mrp?.toString() || "",
-        purchaseRate: selectedBatch.purchaseRate?.toString() || "",
-        gstPercentage: selectedBatch.gstPercentage?.toString() || "0",
-        expiryDate: selectedBatch.expiryDate
-      };
-      // Recalculate totals with new mrp/gst
+    // Handle item name change with debounced search
+    if (name === "itemName") {
+      updateItem(index, { itemName: value });
+      
+      if (value && value.trim().length >= 2) {
+        setActiveItemIndex(index);
+        fetchInventoryData(value, email, index);
+      } else {
+        setShowAutocomplete(false);
+      }
+      return;
+    }
+
+    // Handle batch selection: auto-populate MRP, Sale Rate, Purchase Rate, GST, Expiry
+    if (name === "batch") {
+      const currentItem = items[index];
+      const cleanBatch = value;
+      const selectedBatch = currentItem.batchOptions.find(
+        (batch) => batch.batchNumber === cleanBatch
+      );
+      
+      if (selectedBatch) {
+        const autoMrp = selectedBatch.mrp?.toString() || selectedBatch.purchaseRate?.toString() || "";
+        const autoSaleRate = autoMrp; // Default sales rate = MRP
+        const autoPurchaseRate = selectedBatch.purchaseRate?.toString() || "";
+        const autoGst = selectedBatch.gstPercentage?.toString() || "0";
+        const autoAvailable = selectedBatch.quantity ?? 0;
+        const currentQty = parseFloat(currentItem.quantity);
+        const defaultQty = (currentQty > 0 && currentQty <= autoAvailable) ? currentQty.toString() : (autoAvailable > 0 ? "1" : "0");
+
+        let updatedPayload = {
+          ...currentItem,
+          batch: cleanBatch,
+          availableQuantity: autoAvailable,
+          quantity: defaultQty,
+          mrp: autoMrp,
+          saleRate: autoSaleRate,
+          purchaseRate: autoPurchaseRate,
+          discount: currentItem.discount || "0",
+          gstPercentage: autoGst,
+          expiryDate: selectedBatch.expiryDate || ""
+        };
+        updatedPayload = calculateItemTotals(updatedPayload);
+        updateItem(index, updatedPayload);
+      }
+      return;
+    }
+
+    // When user changes Sale Rate: automatically recalculate discount %
+    if (name === "saleRate") {
+      const currentMrp = parseFloat(items[index].mrp) || 0;
+      const newRate = parseFloat(value) || 0;
+      let newDiscount = "0";
+      if (currentMrp > 0 && newRate < currentMrp) {
+        newDiscount = (((currentMrp - newRate) / currentMrp) * 100).toFixed(1);
+      }
+      let updatedPayload = { ...items[index], saleRate: value, discount: newDiscount };
       updatedPayload = calculateItemTotals(updatedPayload);
       updateItem(index, updatedPayload);
+      return;
     }
-    return;
-  }
-  
-  // Handle quantity, discount, and other fields
-  let updatedPayload = { ...items[index], [name]: value };
-  updatedPayload = calculateItemTotals(updatedPayload);
-  updateItem(index, updatedPayload);
-};
+
+    // When user changes Discount %: automatically recalculate Sale Rate
+    if (name === "discount") {
+      const currentMrp = parseFloat(items[index].mrp) || 0;
+      const newDisc = parseFloat(value) || 0;
+      let newSaleRate = currentMrp;
+      if (currentMrp > 0 && newDisc >= 0) {
+        newSaleRate = currentMrp * (1 - newDisc / 100);
+      }
+      let updatedPayload = { ...items[index], discount: value, saleRate: newSaleRate.toFixed(2) };
+      updatedPayload = calculateItemTotals(updatedPayload);
+      updateItem(index, updatedPayload);
+      return;
+    }
+
+    // When user changes MRP: automatically recalculate Sale Rate based on existing discount
+    if (name === "mrp") {
+      const newMrp = parseFloat(value) || 0;
+      const currentDisc = parseFloat(items[index].discount) || 0;
+      const newSaleRate = newMrp * (1 - currentDisc / 100);
+      let updatedPayload = { ...items[index], mrp: value, saleRate: newSaleRate.toFixed(2) };
+      updatedPayload = calculateItemTotals(updatedPayload);
+      updateItem(index, updatedPayload);
+      return;
+    }
+    
+    // Handle quantity and other fields
+    let updatedPayload = { ...items[index], [name]: value };
+    updatedPayload = calculateItemTotals(updatedPayload);
+    updateItem(index, updatedPayload);
+  };
 
   const handleDetailsChange = (event) => {
     const { name, value } = event.target;
@@ -426,12 +579,60 @@ const handleItemChange = (index, event) => {
     setSellDetails({ ...sellDetails, [name]: value });
   };
   
-  // Handle autocomplete selection
-  const handleAutocompleteSelect = (itemName) => {
-    if (activeItemIndex !== null) {
-      updateItem(activeItemIndex, { itemName });
-      setShowAutocomplete(false);
-    }
+  // Handle autocomplete selection - instant populate without debounced refetch lag
+  const handleAutocompleteSelect = (selectedResult) => {
+    if (activeItemIndex === null) return;
+    setShowAutocomplete(false);
+
+    // Resolve target result whether passed as object or string
+    const targetItem = (typeof selectedResult === 'object' && selectedResult !== null)
+      ? selectedResult
+      : (searchResults.find(r => r.itemName === selectedResult) || { itemName: selectedResult });
+
+    // Find all batches in searchResults for this medicine
+    const matchingBatches = searchResults.filter(
+      r => r.itemName?.trim().toLowerCase() === targetItem.itemName?.trim().toLowerCase()
+    );
+
+    const batchOptions = (matchingBatches.length > 0 ? matchingBatches : [targetItem]).map((b) => ({
+      batchNumber: b.batch || 'DEFAULT',
+      quantity: b.availableQuantity ?? b.quantity ?? 0,
+      mrp: b.mrp,
+      purchaseRate: b.purchaseRate,
+      gstNo: sellDetails.gstNumber,
+      expiryDate: b.expiryDate,
+      gstPercentage: b.gstPercentage
+    }));
+
+    // Pick in-stock batch if selected one is empty
+    const inStockBatch = (targetItem.availableQuantity > 0 ? targetItem : null)
+      || matchingBatches.find(b => (b.availableQuantity ?? b.quantity ?? 0) > 0)
+      || targetItem;
+
+    const autoMrp = inStockBatch.mrp?.toString() || inStockBatch.purchaseRate?.toString() || "";
+    const autoSaleRate = autoMrp; // Default sales rate = MRP
+    const autoPurchaseRate = inStockBatch.purchaseRate?.toString() || "";
+    const autoGst = inStockBatch.gstPercentage?.toString() || "0";
+    const autoAvailable = inStockBatch.availableQuantity ?? inStockBatch.quantity ?? 0;
+    const defaultQty = autoAvailable > 0 ? "1" : "0";
+
+    let updatedRow = {
+      itemName: targetItem.itemName,
+      batchOptions,
+      batch: inStockBatch.batch || 'DEFAULT',
+      availableQuantity: autoAvailable,
+      quantity: defaultQty,
+      mrp: autoMrp,
+      saleRate: autoSaleRate,
+      purchaseRate: autoPurchaseRate,
+      discount: "0",
+      gstPercentage: autoGst,
+      expiryDate: inStockBatch.expiryDate || ""
+    };
+
+    updatedRow = calculateItemTotals(updatedRow);
+    updateItem(activeItemIndex, updatedRow);
+    setMessage("");
   };
   
   // Close autocomplete when clicking outside
@@ -502,8 +703,8 @@ const handleItemChange = (index, event) => {
       'Item Name',
       'Batch',
       'Qty',
-      'Purchase Rate',
       'MRP',
+      'Rate',
       'Disc%',
       'GST%',
       'Expiry Date',
@@ -514,12 +715,12 @@ const handleItemChange = (index, event) => {
       item.itemName,
       item.batch,
       item.quantity,
-      `₹${parseFloat(item.purchaseRate).toFixed(2)}`,
-      `₹${parseFloat(item.mrp).toFixed(2)}`,
-      `${item.discount}%`,
-      `${item.gstPercentage}%`,
+      `₹${parseFloat(item.mrp || 0).toFixed(2)}`,
+      `₹${parseFloat(item.saleRate || item.mrp || 0).toFixed(2)}`,
+      `${item.discount || 0}%`,
+      `${item.gstPercentage || 0}%`,
       item.expiryDate ? new Date(item.expiryDate).toISOString().split('T')[0] : '-',
-      `₹${parseFloat(item.amount).toFixed(2)}`
+      `₹${parseFloat(item.amount || 0).toFixed(2)}`
     ]);
     
     doc.autoTable({
@@ -803,7 +1004,7 @@ const handleItemChange = (index, event) => {
 
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/bills/sale`, {
+      const response = await fetch(`${API_BASE_URL}/api/bills/sale`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -813,35 +1014,51 @@ const handleItemChange = (index, event) => {
         body: JSON.stringify(body),
       });
 
-      const responseData = await response.json();
+      const responseData = await response.json().catch(() => ({}));
 
-      // Always treat as success if pdfUrl is present
-      if (responseData.pdfUrl) {
-        try {
-          const pdfResponse = await fetch(`${process.env.REACT_APP_API_URL}${responseData.pdfUrl}`);
-          const blob = await pdfResponse.blob();
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.setAttribute('download', `${sellDetails.saleInvoiceNumber}.pdf`);
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.URL.revokeObjectURL(url);
-          setMessage({ type: 'success', text: 'Invoice created and PDF downloaded!' });
-          generatePDF();
-          resetItems();
-          resetForm();
-          return;
-        } catch (pdfError) {
-          console.error('Error downloading PDF:', pdfError);
-          setMessage({ type: 'error', text: 'Invoice created but failed to download PDF.' });
-          return;
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Sales invoice created & inventory stock updated successfully!' });
+        if (typeof toast !== 'undefined' && toast.success) {
+          toast.success('Sales invoice created & stock updated!');
         }
+
+        // Handle PDF download
+        if (responseData.pdfUrl) {
+          try {
+            const pdfResponse = await fetch(`${API_BASE_URL}${responseData.pdfUrl}`);
+            const blob = await pdfResponse.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${sellDetails.saleInvoiceNumber}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+          } catch (pdfError) {
+            console.error('Error downloading backend PDF, generating client PDF:', pdfError);
+            generatePDF();
+          }
+        } else {
+          generatePDF();
+        }
+
+        resetItems();
+        resetForm();
+
+        // Broadcast inventory update via socket
+        if (socket) {
+          socket.emit(SOCKET_EVENTS.INVENTORY_UPDATE, {
+            email,
+            timestamp: new Date().toISOString()
+          });
+        }
+        return;
       }
 
-      // If no pdfUrl, show error
-      setMessage({ type: 'error', text: responseData.message || "Failed to create invoice" });
+      // If response not ok, show detailed error
+      const errorMsg = responseData.message || responseData.error || "Failed to create invoice";
+      setMessage({ type: 'error', text: errorMsg });
     } catch (error) {
       setMessage({ type: 'error', text: "Error creating invoice: " + (error.message || '') });
     } finally {
@@ -850,8 +1067,8 @@ const handleItemChange = (index, event) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 p-6">
-      <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-[1360px] mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-8">
         <div className="mb-8 text-center">
           <h2 className="text-3xl font-bold text-indigo-600 mb-2">Create Sales Invoice</h2>
           <div className="h-1 w-20 bg-indigo-500 mx-auto rounded-full"></div>
@@ -922,22 +1139,30 @@ const handleItemChange = (index, event) => {
         </div>
 
         <div className="mb-8">
-          <h3 className="text-xl font-semibold text-indigo-600 mb-4">Item Details</h3>
-          <div className="rounded-xl border-2 border-indigo-50 ">
-            <table className="w-full">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold text-indigo-600">Item Details</h3>
+            <span className="text-xs text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-medium">
+              {items.length} {items.length === 1 ? 'item' : 'items'} in bill
+            </span>
+          </div>
+          <div className="rounded-xl border-2 border-indigo-50 overflow-x-auto shadow-xs">
+            <table className="w-full text-left border-collapse">
               <thead className="bg-indigo-600 text-white">
                 <tr>
-                  {["Item Name", "Batch", "Available", "Qty", "Purchase Rate", "MRP", "Discount%", "GST %", "Expiry Date", "Amount"].map((header, idx) => (
-                    <th 
-                      key={idx}
-                      className="px-4 py-3 text-left text-sm font-medium last:text-right"
-                    >
-                      {header}
-                    </th>
-                  ))}
+                  <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[320px]">Item Name</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[150px]">Batch</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[90px] text-center">Available</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[85px] text-center">Qty</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[105px] text-center">MRP (₹)</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[120px] text-center">Sale Rate (₹)</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[90px] text-center">Disc %</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[90px] text-center">GST %</th>
+                  <th className="px-3 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[110px] text-center">Expiry</th>
+                  <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider min-w-[125px] text-right">Net Amount</th>
+                  <th className="px-2 py-3.5 text-center w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-indigo-50">
+              <tbody className="divide-y divide-indigo-50 bg-white">
                 {items.map((item, index) => {
                   // Calculate adjusted available quantity for this row
                   const pickedElsewhere = items.reduce((sum, row, idx) => {
@@ -955,130 +1180,207 @@ const handleItemChange = (index, event) => {
                   return (
                     <tr 
                       key={index}
-                      className="hover:bg-indigo-50 transition-colors"
+                      className="hover:bg-indigo-50/50 transition-colors"
                     >
-                      <td className="px-4 py-3 relative">
+                      {/* Medicine Search with Generous Width */}
+                      <td className="px-4 py-3 relative min-w-[320px]">
                         <input
                           type="text"
                           name="itemName"
-                          placeholder="Type medicine name (e.g., Dolo) to auto-fetch..."
-                          title="Start typing a medicine name to fetch available batches from inventory"
+                          placeholder="Type medicine name (e.g. Zincovit, Dolo)..."
+                          title="Start typing a medicine name to search available batches"
                           value={item.itemName}
                           onChange={(e) => handleItemChange(index, e)}
-                          className="w-full rounded-md border-indigo-100 focus:border-indigo-500 focus:ring-indigo-500"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (searchResults && searchResults.length > 0) {
+                                const exact = searchResults.find(
+                                  r => r.itemName?.trim().toLowerCase() === item.itemName?.trim().toLowerCase()
+                                );
+                                handleAutocompleteSelect(exact || searchResults[0]);
+                              }
+                            } else if (e.key === 'Escape') {
+                              setShowAutocomplete(false);
+                            }
+                          }}
+                          autoComplete="off"
+                          className="w-full rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 px-3.5 py-2.5 text-sm font-semibold text-gray-800 bg-white placeholder-gray-400 transition-colors shadow-2xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             setActiveItemIndex(index);
-                            if (item.itemName) {
+                            if (item.itemName && item.itemName.trim().length >= 2) {
                               setShowAutocomplete(true);
                             }
                           }}
                         />
                         {showAutocomplete && activeItemIndex === index && (
                           <div 
-                            className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                            className="absolute z-30 left-4 mt-1.5 w-[440px] max-w-[90vw] bg-white border border-indigo-100 rounded-xl shadow-2xl max-h-72 overflow-y-auto"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {searchLoading ? (
-                              <div className="p-2 text-center text-gray-500">
-                                <svg className="animate-spin h-5 w-5 mx-auto" viewBox="0 0 24 24">
+                              <div className="p-4 text-center text-gray-500 flex items-center justify-center space-x-2">
+                                <svg className="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                                 </svg>
+                                <span className="text-xs font-medium text-slate-500">Searching inventory...</span>
                               </div>
                             ) : searchResults.length > 0 ? (
-                              <ul>
+                              <ul className="divide-y divide-gray-100">
                                 {searchResults.map((result, idx) => (
                                   <li 
                                     key={idx}
-                                    className="px-4 py-2 hover:bg-indigo-50 cursor-pointer"
-                                    onClick={() => handleAutocompleteSelect(result.itemName)}
+                                    className="px-4 py-3 hover:bg-indigo-50/70 cursor-pointer flex justify-between items-center transition-colors group"
+                                    onClick={() => handleAutocompleteSelect(result)}
                                   >
-                                    {result.itemName}
+                                    <div className="flex-1 min-w-0 pr-3">
+                                      <div className="font-semibold text-gray-900 text-sm truncate group-hover:text-indigo-600">
+                                        {result.itemName}
+                                      </div>
+                                      <div className="flex items-center space-x-2 text-xs text-gray-500 mt-0.5">
+                                        <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-medium">
+                                          {result.batch || 'DEFAULT'}
+                                        </span>
+                                        {result.expiryDate && (
+                                          <span className="text-slate-400">
+                                            Exp: {new Date(result.expiryDate).toLocaleDateString('en-GB')}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <div className="text-sm font-bold text-indigo-600">₹{result.mrp || result.purchaseRate || 0}</div>
+                                      <div className="text-xs">
+                                        <span className={`font-semibold px-1.5 py-0.5 rounded text-[11px] ${
+                                          (result.availableQuantity ?? result.quantity ?? 0) > 0 
+                                            ? 'bg-emerald-50 text-emerald-700' 
+                                            : 'bg-rose-50 text-rose-600'
+                                        }`}>
+                                          {result.availableQuantity ?? result.quantity ?? 0} in stock
+                                        </span>
+                                      </div>
+                                    </div>
                                   </li>
                                 ))}
                               </ul>
                             ) : (
-                              <div className="p-2 text-center text-gray-500">
-                                No results found
+                              <div className="p-4 text-center text-xs text-gray-500">
+                                No matching inventory batches found
                               </div>
                             )}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+
+                      {/* Batch Select */}
+                      <td className="px-3 py-3 min-w-[150px]">
                         <select
                           name="batch"
                           title="Select a batch after typing the item name"
                           value={item.batch}
                           onChange={(e) => handleItemChange(index, e)}
-                          className="w-full rounded-md border-indigo-100 focus:border-indigo-500 focus:ring-indigo-500"
+                          className="w-full rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 py-2.5 px-2.5 text-xs font-semibold text-gray-700 bg-white transition-colors"
                         >
                           <option value="">Select Batch</option>
                           {item.batchOptions.map((batch, idx) => (
                             <option key={idx} value={batch.batchNumber}>
-                              {batch.batchNumber.replace(/[^a-zA-Z0-9]/g, '')}
+                              {batch.batchNumber} {batch.quantity !== undefined ? `(${batch.quantity} left)` : ''}
                             </option>
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {adjustedAvailable >= 0 ? adjustedAvailable : 0}
+
+                      {/* Available Count */}
+                      <td className="px-3 py-3 text-center min-w-[90px]">
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${
+                          adjustedAvailable > 0 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {adjustedAvailable >= 0 ? adjustedAvailable : 0}
+                        </span>
                       </td>
-                      <td className="px-4 py-3">
+
+                      {/* Quantity */}
+                      <td className="px-3 py-3 min-w-[85px]">
                         <input
                           type="number"
                           name="quantity"
                           value={item.quantity}
                           onChange={(e) => {
-                            // Validate against adjustedAvailable
                             const val = parseFloat(e.target.value) || 0;
-                            if (val > adjustedAvailable) {
+                            if (adjustedAvailable > 0 && val > adjustedAvailable) {
                               setMessage({ type: 'error', text: `Cannot select more than available (${adjustedAvailable}) for this batch.` });
                               return;
                             }
                             setMessage("");
                             handleItemChange(index, e);
                           }}
-                          className="w-full rounded-md border-indigo-100 focus:border-indigo-500 focus:ring-indigo-500"
+                          className="w-full rounded-lg border-2 border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 py-2 px-2 text-center text-sm font-bold text-gray-900 bg-white shadow-2xs"
                           min="0"
-                          max={adjustedAvailable}
+                          max={adjustedAvailable > 0 ? adjustedAvailable : undefined}
                         />
                       </td>
-                      <td className="px-4 py-3">
+
+                      {/* Automated MRP */}
+                      <td className="px-3 py-3 min-w-[105px]">
                         <div className="flex items-center">
-                          <span className="text-gray-500 mr-1">₹</span>
+                          <span className="text-gray-400 mr-1 text-xs font-medium">₹</span>
                           <input
                             type="number"
-                            name="purchaseRate"
-                            value={item.purchaseRate}
-                            readOnly
-                            className="w-24 px-2 py-1 text-sm text-center bg-gray-50 border border-gray-300 rounded-md"
+                            name="mrp"
+                            value={item.mrp}
+                            onChange={(e) => handleItemChange(index, e)}
+                            placeholder="0"
+                            title="Maximum Retail Price"
+                            className="w-full px-2 py-2 text-xs text-center font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-indigo-500"
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          name="mrp"
-                          value={item.mrp}
-                          disabled
-                          className="w-full rounded-md bg-indigo-50 border-indigo-100"
-                        />
+
+                      {/* Automated & Editable Sale Rate */}
+                      <td className="px-3 py-3 min-w-[120px]">
+                        <div className="flex flex-col">
+                          <div className="flex items-center">
+                            <span className="text-indigo-600 mr-1 text-xs font-bold">₹</span>
+                            <input
+                              type="number"
+                              name="saleRate"
+                              value={item.saleRate}
+                              onChange={(e) => handleItemChange(index, e)}
+                              placeholder="0"
+                              title="Customer Selling Rate"
+                              className="w-full px-2 py-2 text-xs text-center font-bold text-indigo-900 bg-indigo-50/70 border border-indigo-300 rounded-lg focus:bg-white focus:border-indigo-600 shadow-2xs"
+                            />
+                          </div>
+                          {item.purchaseRate && (
+                            <span className="text-[10px] text-slate-400 mt-0.5 text-center whitespace-nowrap">
+                              Cost: ₹{item.purchaseRate}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          name="discount"
-                          value={item.discount}
-                          onChange={(e) => handleItemChange(index, e)}
-                          className="w-full rounded-md border-indigo-100 focus:border-indigo-500 focus:ring-indigo-500"
-                          min="0"
-                          max="100"
-                        />
+                      {/* Discount % */}
+                      <td className="px-3 py-3 min-w-[90px]">
+                        <div className="flex items-center">
+                          <input
+                            type="number"
+                            name="discount"
+                            value={item.discount}
+                            onChange={(e) => handleItemChange(index, e)}
+                            className="w-full px-1.5 py-2 text-xs text-center font-medium rounded-lg border-2 border-indigo-100 focus:border-indigo-500"
+                            min="0"
+                            max="100"
+                          />
+                          <span className="text-gray-400 ml-1 text-xs">%</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
+
+                      {/* GST % */}
+                      <td className="px-3 py-3 min-w-[90px]">
                         <div className="flex items-center">
                           <input
                             type="number"
@@ -1088,22 +1390,38 @@ const handleItemChange = (index, event) => {
                             step="0.01"
                             min="0"
                             max="100"
-                            className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-1.5 py-2 text-xs text-center font-medium border-2 border-indigo-100 rounded-lg focus:border-indigo-500"
                           />
-                          <span className="text-gray-500 ml-1">%</span>
+                          <span className="text-gray-500 ml-1 text-xs">%</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="date"
-                          name="expiryDate"
-                          value={item.expiryDate ? new Date(item.expiryDate).toISOString().split('T')[0] : ''}
-                          readOnly
-                          className="w-full rounded-md bg-indigo-50 border-indigo-100"
-                        />
+
+                      {/* Expiry Date */}
+                      <td className="px-3 py-3 text-center min-w-[110px]">
+                        <span className="text-xs text-slate-700 font-mono font-medium whitespace-nowrap bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                          {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : '-'}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-emerald-600">
-                        {item.amount || "-"}
+
+                      {/* Net Amount */}
+                      <td className="px-4 py-3 text-right font-bold text-emerald-600 font-mono text-sm whitespace-nowrap min-w-[125px]">
+                        {item.amount && item.amount !== "-" ? `₹${item.amount}` : "-"}
+                      </td>
+
+                      {/* Remove Item Action */}
+                      <td className="px-2 py-3 text-center w-10">
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            title="Remove this medicine row"
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1113,16 +1431,40 @@ const handleItemChange = (index, event) => {
           </div>
         </div>
 
-        <div className="flex justify-between items-center">
-          <button
-            onClick={addItem}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-            Add Item
-          </button>
+        <div className="flex flex-wrap justify-between items-center gap-4">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={addItem}
+              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Add Item
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCheckDrugSafety}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-all flex items-center shadow-sm"
+              disabled={safetyLoading}
+            >
+              {safetyLoading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 mr-2 text-white" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                  </svg>
+                  <span>Checking...</span>
+                </>
+              ) : (
+                <>
+                  <span className="mr-2">🛡️</span>
+                  <span>Clinical Drug Safety Check</span>
+                </>
+              )}
+            </button>
+          </div>
 
           <div className="space-x-4">
             {message && (
@@ -1169,6 +1511,94 @@ const handleItemChange = (index, event) => {
           </div>
         </div>
       </div>
+
+      {/* AI Drug Safety Assessment Modal */}
+      {safetyModalOpen && safetyResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-start border-b pb-3 mb-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-2xl">🛡️</span>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">AI Clinical Drug Safety Assessment</h3>
+                  <p className="text-xs text-gray-500">Cross-checking drug interactions & patient risks</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSafetyModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Severity Banner */}
+            <div className={`p-4 rounded-xl mb-4 ${
+              safetyResult.severity === 'high'
+                ? 'bg-red-50 border border-red-200 text-red-800'
+                : safetyResult.severity === 'moderate'
+                ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+            }`}>
+              <div className="font-semibold text-sm flex items-center mb-1">
+                {safetyResult.severity === 'high' && '⚠️ HIGH RISK: Adverse Interaction Detected'}
+                {safetyResult.severity === 'moderate' && '⚡ CAUTION: Moderate Interaction Identified'}
+                {(safetyResult.severity === 'low' || safetyResult.severity === 'none') && '✅ SAFE: No Severe Contraindications Found'}
+              </div>
+              <p className="text-xs mt-1">{safetyResult.summary}</p>
+            </div>
+
+            {/* Interactions */}
+            {safetyResult.interactions && safetyResult.interactions.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">Identified Drug-Drug Interactions:</h4>
+                <div className="space-y-2">
+                  {safetyResult.interactions.map((inter, i) => (
+                    <div key={i} className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+                      <div className="font-bold text-gray-900">
+                        {Array.isArray(inter.drugs) ? inter.drugs.join(' ↔ ') : 'Interacting Medications'}
+                      </div>
+                      <p className="text-gray-700 mt-1">{inter.description}</p>
+                      {inter.clinicalRisk && (
+                        <p className="text-red-600 font-medium mt-1">Risk: {inter.clinicalRisk}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cautions */}
+            {safetyResult.cautions && safetyResult.cautions.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-800 mb-1">Pharmacist Counseling Notes:</h4>
+                <ul className="list-disc pl-5 text-xs text-gray-600 space-y-1">
+                  {safetyResult.cautions.map((caution, i) => (
+                    <li key={i}>{caution}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Recommendations */}
+            {safetyResult.recommendations && (
+              <div className="mb-5 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
+                <span className="font-semibold">Clinical Recommendation: </span>
+                {safetyResult.recommendations}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setSafetyModalOpen(false)}
+                className="px-5 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg text-sm font-medium transition"
+              >
+                Acknowledge & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -76,11 +76,23 @@ const userSchema = new mongoose.Schema({
         enum: ['admin', 'manager', 'user'],
         default: 'user'
     },
-    // Remove the old verificationToken field if it exists
-    // verificationToken: {
-    //     type: String,
-    //     default: null
-    // }
+    pharmacyName: {
+        type: String,
+        default: 'MediCare Pharmacy',
+        trim: true
+    },
+    lastLogin: {
+        type: Date,
+        default: null
+    },
+    lastLoginIP: {
+        type: String,
+        default: null
+    },
+    loginCount: {
+        type: Number,
+        default: 0
+    }
 }, {
     timestamps: true
 });

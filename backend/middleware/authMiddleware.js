@@ -27,7 +27,10 @@ export const isAuthenticated = (req, res, next) => {
             });
         }
 
-        req.user = decoded;
+        req.user = {
+            ...decoded,
+            role: decoded.role || 'user'
+        };
         next();
     } catch (error) {
         return res.status(401).json({ 
@@ -36,6 +39,22 @@ export const isAuthenticated = (req, res, next) => {
             error: error.message
         });
     }
+};
+
+/**
+ * Role-Based Access Control (RBAC) middleware
+ * Ensures the authenticated user possesses one of the authorized roles
+ */
+export const authorizeRoles = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+            return res.status(403).json({
+                success: false,
+                message: `Access denied: Role '${req.user?.role || 'unknown'}' is not authorized to access this resource. Required: [${roles.join(', ')}]`
+            });
+        }
+        next();
+    };
 };
 
 // middlewares/authMiddleware.js
